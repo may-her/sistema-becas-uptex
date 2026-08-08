@@ -16,6 +16,7 @@ class Solicitud extends Model
         'convocatoria_id',
         'carrera_id',
         'grupo',
+        'modalidad',
         'estatus',
         'comentario_revision',
         'revisado_por',
@@ -26,12 +27,6 @@ class Solicitud extends Model
         'revisado_at' => 'datetime',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | ALUMNO
-    |--------------------------------------------------------------------------
-    */
-
     public function user()
     {
         return $this->belongsTo(
@@ -39,12 +34,6 @@ class Solicitud extends Model
             'user_id'
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONVOCATORIA
-    |--------------------------------------------------------------------------
-    */
 
     public function convocatoria()
     {
@@ -54,12 +43,6 @@ class Solicitud extends Model
         );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CARRERA
-    |--------------------------------------------------------------------------
-    */
-
     public function carrera()
     {
         return $this->belongsTo(
@@ -68,12 +51,6 @@ class Solicitud extends Model
         );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | USUARIO QUE REVISÓ
-    |--------------------------------------------------------------------------
-    */
-
     public function revisor()
     {
         return $this->belongsTo(
@@ -81,12 +58,6 @@ class Solicitud extends Model
             'revisado_por'
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | DOCUMENTOS
-    |--------------------------------------------------------------------------
-    */
 
     public function documentos()
     {

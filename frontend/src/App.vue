@@ -13,15 +13,9 @@ import TutorDashboard from './components/TutorDashboard.vue';
 import AlumnoDashboard from './components/AlumnoDashboard.vue';
 
 
-/*
-|--------------------------------------------------------------------------
-| ESTADO GENERAL
-|--------------------------------------------------------------------------
-*/
-
-const vistaActiva = ref('inicio');
-
-const usuarioActivo = ref(null);
+/* =========================================================
+   FONDOS
+========================================================= */
 
 const fondos = ref([
   campus1,
@@ -34,165 +28,228 @@ const fondoActivo = ref(0);
 let intervaloFondo = null;
 
 
-/*
-|--------------------------------------------------------------------------
-| FONDO AUTOMÁTICO
-|--------------------------------------------------------------------------
-*/
-
 const cambiarFondoAutomatico = () => {
+
   intervaloFondo = setInterval(() => {
+
     fondoActivo.value =
-      (fondoActivo.value + 1) % fondos.value.length;
+      (
+        fondoActivo.value + 1
+      ) % fondos.value.length;
+
   }, 4000);
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| NAVEGACIÓN GENERAL
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   VISTA PRINCIPAL
+========================================================= */
+
+const vistaActiva = ref('inicio');
+
+const usuarioActivo = ref(null);
+
 
 const cambiarALogin = () => {
-  mensajeLogin.value = '';
-  errorLogin.value = false;
+
   vistaActiva.value = 'login';
 };
 
+
 const cambiarAInicio = () => {
+
   vistaActiva.value = 'inicio';
 };
 
+
 const cambiarARegistro = () => {
-  mensajeRegistro.value = '';
-  errorRegistro.value = false;
+
   vistaActiva.value = 'registro';
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| REDIRECCIÓN SEGÚN ROL
-|--------------------------------------------------------------------------
-|
-| El rol correcto del Super Administrador es "superadmin".
-|
-| Conservamos también "master" temporalmente por compatibilidad
-| en caso de que exista algún usuario viejo en la base.
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   REDIRECCIÓN SEGÚN ROL
+========================================================= */
 
 const redirigirSegunRol = (role) => {
 
-  const rol = String(role || '')
-    .trim()
-    .toLowerCase();
+  const rol =
+    String(role || '')
+      .trim()
+      .toLowerCase();
+
 
   const rutas = {
 
-    superadmin: 'panel-master',
+    /*
+    |--------------------------------------------------------------------------
+    | Rol real actual de tu BD
+    |--------------------------------------------------------------------------
+    */
 
-    // Compatibilidad temporal
-    master: 'panel-master',
+    superadmin:
+      'panel-master',
 
-    admin: 'panel-admin',
+    /*
+    |--------------------------------------------------------------------------
+    | Lo dejamos por compatibilidad si existiera algún usuario antiguo.
+    |--------------------------------------------------------------------------
+    */
 
-    profesor: 'panel-profesor',
+    master:
+      'panel-master',
 
-    alumno: 'panel-alumno',
+    admin:
+      'panel-admin',
+
+    profesor:
+      'panel-profesor',
+
+    alumno:
+      'panel-alumno'
   };
 
 
   if (!rutas[rol]) {
 
     console.error(
-      'Rol no reconocido por el frontend:',
+      'Rol no reconocido:',
       rol
     );
 
-    return false;
+    usuarioActivo.value = null;
+
+    vistaActiva.value = 'inicio';
+
+    return;
   }
 
 
-  vistaActiva.value = rutas[rol];
-
-  return true;
+  vistaActiva.value =
+    rutas[rol];
 };
 
 
+/* =========================================================
+   RESTAURAR SESIÓN
+========================================================= */
+
 /*
 |--------------------------------------------------------------------------
-| RESTAURAR SESIÓN
+| IMPORTANTE
 |--------------------------------------------------------------------------
+|
+| Antes:
+|
+| Si había auth_token + auth_user en localStorage,
+| App.vue confiaba directamente en esos datos y abría el dashboard.
+|
+| Ahora:
+|
+| 1. Busca el token.
+| 2. Si no existe, va a inicio.
+| 3. Si existe, Laravel valida el token con GET /api/user.
+| 4. Sólo si Laravel confirma el usuario, abre el dashboard.
+|
 */
 
 const restaurarSesion = async () => {
 
-  const token = localStorage.getItem(
-    'auth_token'
-  );
+  const tokenGuardado =
+    localStorage.getItem(
+      'auth_token'
+    );
 
 
-  if (!token) {
+  if (!tokenGuardado) {
+
+    localStorage.removeItem(
+      'auth_user'
+    );
+
+    usuarioActivo.value =
+      null;
+
+    vistaActiva.value =
+      'inicio';
+
     return;
   }
 
 
   try {
 
+    const { data } =
+      await api.get(
+        '/user'
+      );
+
+
     /*
-    |----------------------------------------------------------------------
-    | No confiamos solamente en localStorage.
-    | Preguntamos al backend si el token sigue siendo válido.
-    |----------------------------------------------------------------------
+    |--------------------------------------------------------------------------
+    | Dependiendo de cómo responda tu endpoint:
+    |
+    | { user: {...} }
+    |
+    | { data: {...} }
+    |
+    | o directamente {...}
+    |--------------------------------------------------------------------------
     */
 
-    const { data } = await api.get('/user');
-
-
     const usuario =
-      data.user || data;
+      data?.user
+      ||
+      data?.data
+      ||
+      data;
 
 
-    if (!usuario) {
+    if (
+      !usuario
+      ||
+      !usuario.id
+      ||
+      !usuario.role
+    ) {
 
       throw new Error(
-        'No se recibió información del usuario.'
+        'La API no devolvió un usuario válido.'
       );
     }
 
 
-    usuarioActivo.value = usuario;
+    usuarioActivo.value =
+      usuario;
 
 
     localStorage.setItem(
       'auth_user',
-      JSON.stringify(usuario)
+      JSON.stringify(
+        usuario
+      )
     );
 
 
-    const reconocido =
-      redirigirSegunRol(
-        usuario.role
-      );
-
-
-    if (!reconocido) {
-
-      throw new Error(
-        `Rol no reconocido: ${usuario.role}`
-      );
-    }
-
+    redirigirSegunRol(
+      usuario.role
+    );
 
   } catch (error) {
 
-    console.error(
-      'No fue posible restaurar la sesión:',
+    console.warn(
+      'No se pudo restaurar la sesión:',
       error
     );
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Si el token ya venció o es inválido,
+    | eliminamos cualquier sesión vieja.
+    |--------------------------------------------------------------------------
+    */
 
     localStorage.removeItem(
       'auth_token'
@@ -203,118 +260,112 @@ const restaurarSesion = async () => {
     );
 
 
-    usuarioActivo.value = null;
+    usuarioActivo.value =
+      null;
 
-    vistaActiva.value = 'inicio';
+
+    vistaActiva.value =
+      'inicio';
   }
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| MOUNT
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   CONVOCATORIAS PÚBLICAS
+========================================================= */
 
-onMounted(async () => {
-
-  cambiarFondoAutomatico();
-
-  await restaurarSesion();
-
-});
-
-
-onUnmounted(() => {
-
-  if (intervaloFondo) {
-    clearInterval(
-      intervaloFondo
-    );
-  }
-
-});
-
-
-/*
-|--------------------------------------------------------------------------
-| CONVOCATORIAS PÚBLICAS
-|--------------------------------------------------------------------------
-*/
-
-const convocatoriasPublicas = ref([]);
+const convocatoriasPublicas =
+  ref([]);
 
 const cargandoConvocatoriasPublicas =
   ref(false);
 
 
-const verConvocatoriaPublica =
-  async () => {
+const verConvocatoriaPublica = async () => {
 
-    vistaActiva.value =
-      'convocatoria-publica';
-
-    cargandoConvocatoriasPublicas.value =
-      true;
+  vistaActiva.value =
+    'convocatoria-publica';
 
 
-    try {
-
-      const { data } =
-        await api.get(
-          '/convocatorias-publicas'
-        );
+  cargandoConvocatoriasPublicas.value =
+    true;
 
 
-      convocatoriasPublicas.value =
-        data.convocatorias ??
-        data.data ??
-        [];
+  try {
 
-
-    } catch (error) {
-
-      console.error(
-        'Error al obtener convocatorias:',
-        error
+    const { data } =
+      await api.get(
+        '/convocatorias-publicas'
       );
 
 
-      convocatoriasPublicas.value = [];
+    /*
+    |--------------------------------------------------------------------------
+    | Tu código original esperaba data.convocatorias.
+    | Dejamos compatibilidad con otras respuestas.
+    |--------------------------------------------------------------------------
+    */
+
+    convocatoriasPublicas.value =
+      data?.convocatorias
+      ||
+      data?.data
+      ||
+      (
+        Array.isArray(data)
+          ? data
+          : []
+      );
+
+  } catch (error) {
+
+    console.error(
+      'Error cargando convocatorias públicas:',
+      error
+    );
 
 
-    } finally {
+    convocatoriasPublicas.value =
+      [];
 
-      cargandoConvocatoriasPublicas.value =
-        false;
-    }
-  };
+  } finally {
+
+    cargandoConvocatoriasPublicas.value =
+      false;
+  }
+};
 
 
-/*
-|--------------------------------------------------------------------------
-| LOGIN
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   LOGIN
+========================================================= */
 
-const correoUsuario = ref('');
+const correoUsuario =
+  ref('');
 
-const passwordUsuario = ref('');
+const passwordUsuario =
+  ref('');
 
-const cargandoLogin = ref(false);
+const cargandoLogin =
+  ref(false);
 
-const mensajeLogin = ref('');
+const mensajeLogin =
+  ref('');
 
-const errorLogin = ref(false);
+const errorLogin =
+  ref(false);
 
 
 const manejarLogin = async () => {
 
-  errorLogin.value = false;
+  errorLogin.value =
+    false;
 
-  mensajeLogin.value = '';
+  mensajeLogin.value =
+    '';
 
-  cargandoLogin.value = true;
+  cargandoLogin.value =
+    true;
 
 
   try {
@@ -324,7 +375,8 @@ const manejarLogin = async () => {
         '/login',
         {
           email:
-            correoUsuario.value.trim(),
+            correoUsuario.value
+              .trim(),
 
           password:
             passwordUsuario.value
@@ -334,98 +386,63 @@ const manejarLogin = async () => {
 
     /*
     |--------------------------------------------------------------------------
-    | El backend actualmente devuelve:
-    |
-    | token
-    | access_token
-    |
-    | Permitimos cualquiera de los dos.
+    | Comprobamos que Laravel realmente devolvió token + user.
     |--------------------------------------------------------------------------
     */
 
-    const token =
-      data.token ||
-      data.access_token;
-
-
-    const usuario =
-      data.user;
-
-
-    if (!token) {
+    if (
+      !data?.token
+      ||
+      !data?.user
+      ||
+      !data?.user?.role
+    ) {
 
       throw new Error(
-        'El servidor no devolvió el token de acceso.'
-      );
-    }
-
-
-    if (!usuario) {
-
-      throw new Error(
-        'El servidor no devolvió los datos del usuario.'
+        'El servidor no devolvió la sesión correctamente.'
       );
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | Guardar sesión
+    | Guardamos token primero.
     |--------------------------------------------------------------------------
     */
 
     localStorage.setItem(
       'auth_token',
-      token
+      data.token
     );
-
-
-    localStorage.setItem(
-      'auth_user',
-      JSON.stringify(usuario)
-    );
-
-
-    usuarioActivo.value =
-      usuario;
 
 
     /*
     |--------------------------------------------------------------------------
-    | Redireccionar
+    | Guardamos usuario sólo después de validar respuesta.
     |--------------------------------------------------------------------------
     */
 
-    const reconocido =
-      redirigirSegunRol(
-        usuario.role
-      );
+    localStorage.setItem(
+      'auth_user',
+      JSON.stringify(
+        data.user
+      )
+    );
 
 
-    if (!reconocido) {
-
-      localStorage.removeItem(
-        'auth_token'
-      );
-
-      localStorage.removeItem(
-        'auth_user'
-      );
+    usuarioActivo.value =
+      data.user;
 
 
-      usuarioActivo.value =
-        null;
+    /*
+    |--------------------------------------------------------------------------
+    | Redirige según el rol REAL.
+    |--------------------------------------------------------------------------
+    */
 
-
-      throw new Error(
-        `Tu cuenta tiene un rol no reconocido: ${usuario.role}`
-      );
-    }
-
-
-    mensajeLogin.value =
-      'Acceso correcto.';
-
+    redirigirSegunRol(
+      data.user.role
+    );
 
   } catch (error) {
 
@@ -435,15 +452,52 @@ const manejarLogin = async () => {
     );
 
 
+    /*
+    |--------------------------------------------------------------------------
+    | Si falló el login, no dejamos basura de una sesión anterior.
+    |--------------------------------------------------------------------------
+    */
+
+    localStorage.removeItem(
+      'auth_token'
+    );
+
+    localStorage.removeItem(
+      'auth_user'
+    );
+
+
+    usuarioActivo.value =
+      null;
+
+
     errorLogin.value =
       true;
 
 
-    mensajeLogin.value =
-      error.response?.data?.message ||
-      error.message ||
-      'Error al iniciar sesión.';
+    if (
+      error.response
+    ) {
 
+      mensajeLogin.value =
+        error.response
+          ?.data
+          ?.message
+        ||
+        'Error al iniciar sesión.';
+
+    } else if (
+      error.request
+    ) {
+
+      mensajeLogin.value =
+        'No se pudo conectar con el servidor.';
+
+    } else {
+
+      mensajeLogin.value =
+        'Error al iniciar sesión.';
+    }
 
   } finally {
 
@@ -453,30 +507,41 @@ const manejarLogin = async () => {
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| LOGOUT
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   CERRAR SESIÓN
+========================================================= */
 
 const cerrarSesion = async () => {
 
   try {
 
-    await api.post(
-      '/logout'
-    );
+    /*
+    |--------------------------------------------------------------------------
+    | Si existe token, Laravel lo revoca.
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      localStorage.getItem(
+        'auth_token'
+      )
+    ) {
+
+      await api.post(
+        '/logout'
+      );
+    }
 
   } catch (error) {
 
     /*
     |--------------------------------------------------------------------------
-    | Aunque falle la petición, limpiamos la sesión local.
+    | Aunque falle el backend, limpiamos la sesión local.
     |--------------------------------------------------------------------------
     */
 
     console.warn(
-      'No se pudo cerrar la sesión en el servidor:',
+      'Error cerrando sesión en backend:',
       error
     );
   }
@@ -501,6 +566,7 @@ const cerrarSesion = async () => {
   passwordUsuario.value =
     '';
 
+
   mensajeLogin.value =
     '';
 
@@ -513,11 +579,9 @@ const cerrarSesion = async () => {
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| REGISTRO
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   REGISTRO
+========================================================= */
 
 const nombreRegistro =
   ref('');
@@ -571,32 +635,47 @@ const manejarRegistro = async () => {
 
   try {
 
-    await api.post(
-      '/register',
-      {
+    const { data } =
+      await api.post(
+        '/register',
+        {
+          name:
+            nombreRegistro.value
+              .trim(),
 
-        name:
-          nombreRegistro.value.trim(),
+          email:
+            correoRegistro.value
+              .trim(),
 
-        email:
-          correoRegistro.value.trim(),
+          password:
+            passwordRegistro.value,
 
-        password:
-          passwordRegistro.value,
-
-        password_confirmation:
-          passwordConfirmacion.value,
-      }
-    );
+          password_confirmation:
+            passwordConfirmacion.value
+        }
+      );
 
 
     correoParaVerificar.value =
-      correoRegistro.value.trim();
+      correoRegistro.value
+        .trim();
 
+
+    mensajeRegistro.value =
+      data?.message
+      ||
+      'Cuenta registrada correctamente.';
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | No iniciamos sesión automáticamente.
+    | Primero verifica correo.
+    |--------------------------------------------------------------------------
+    */
 
     vistaActiva.value =
       'verificacion';
-
 
   } catch (error) {
 
@@ -605,13 +684,17 @@ const manejarRegistro = async () => {
 
 
     mensajeRegistro.value =
-      error.response?.data?.message ||
+      error.response
+        ?.data
+        ?.message
+      ||
       (
         error.request
-          ? 'No se pudo conectar con el servidor.'
-          : 'Error inesperado.'
+          ?
+          'No se pudo conectar con el servidor.'
+          :
+          'Error inesperado.'
       );
-
 
   } finally {
 
@@ -621,11 +704,9 @@ const manejarRegistro = async () => {
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| VERIFICACIÓN DE CORREO
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   VERIFICACIÓN DE CORREO
+========================================================= */
 
 const correoParaVerificar =
   ref('');
@@ -683,16 +764,23 @@ const verificarCodigo = async () => {
 
 
     mensajeVerificacion.value =
-      data.message;
+      data?.message
+      ||
+      'Correo verificado correctamente.';
 
 
-    setTimeout(() => {
+    setTimeout(
+      () => {
 
-      vistaActiva.value =
-        'login';
+        codigoVerificacion.value =
+          '';
 
-    }, 1500);
+        vistaActiva.value =
+          'login';
 
+      },
+      2000
+    );
 
   } catch (error) {
 
@@ -701,9 +789,11 @@ const verificarCodigo = async () => {
 
 
     mensajeVerificacion.value =
-      error.response?.data?.message ||
+      error.response
+        ?.data
+        ?.message
+      ||
       'No se pudo verificar el código.';
-
 
   } finally {
 
@@ -713,13 +803,25 @@ const verificarCodigo = async () => {
 };
 
 
+/* =========================================================
+   REENVIAR CÓDIGO
+========================================================= */
+
 const reenviarCodigo = async () => {
 
-  errorVerificacion.value =
-    false;
+  if (
+    !correoParaVerificar.value
+  ) {
 
-  mensajeVerificacion.value =
-    '';
+    errorVerificacion.value =
+      true;
+
+    mensajeVerificacion.value =
+      'No se encontró el correo a verificar.';
+
+    return;
+  }
+
 
   cargandoVerificacion.value =
     true;
@@ -737,9 +839,14 @@ const reenviarCodigo = async () => {
       );
 
 
-    mensajeVerificacion.value =
-      data.message;
+    errorVerificacion.value =
+      false;
 
+
+    mensajeVerificacion.value =
+      data?.message
+      ||
+      'Código reenviado correctamente.';
 
   } catch (error) {
 
@@ -748,9 +855,11 @@ const reenviarCodigo = async () => {
 
 
     mensajeVerificacion.value =
-      error.response?.data?.message ||
+      error.response
+        ?.data
+        ?.message
+      ||
       'No se pudo reenviar el código.';
-
 
   } finally {
 
@@ -760,11 +869,9 @@ const reenviarCodigo = async () => {
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| RECUPERACIÓN DE CONTRASEÑA
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   RECUPERAR CONTRASEÑA
+========================================================= */
 
 const correoRecuperacion =
   ref('');
@@ -796,250 +903,322 @@ const irARecuperar = () => {
   vistaActiva.value =
     'recuperar';
 
+
   pasoRecuperacion.value =
     1;
+
 
   mensajeRecuperacion.value =
     '';
 
+
   errorRecuperacion.value =
     false;
 
+
   correoRecuperacion.value =
+    '';
+
+
+  codigoRecuperacion.value =
+    '';
+
+
+  passwordNueva.value =
+    '';
+
+
+  passwordNuevaConfirmar.value =
     '';
 };
 
 
 const enviarCodigoRecuperacion =
-  async () => {
+async () => {
+
+  errorRecuperacion.value =
+    false;
+
+
+  mensajeRecuperacion.value =
+    '';
+
+
+  if (
+    !correoRecuperacion.value
+      .trim()
+  ) {
 
     errorRecuperacion.value =
-      false;
+      true;
 
     mensajeRecuperacion.value =
-      '';
+      'Ingresa tu correo institucional.';
 
-    cargandoRecuperacion.value =
+    return;
+  }
+
+
+  cargandoRecuperacion.value =
+    true;
+
+
+  try {
+
+    const { data } =
+      await api.post(
+        '/forgot-password',
+        {
+          email:
+            correoRecuperacion.value
+              .trim()
+        }
+      );
+
+
+    mensajeRecuperacion.value =
+      data?.message
+      ||
+      'Código enviado.';
+
+
+    pasoRecuperacion.value =
+      2;
+
+  } catch (error) {
+
+    errorRecuperacion.value =
       true;
 
 
-    try {
+    mensajeRecuperacion.value =
+      error.response
+        ?.data
+        ?.message
+      ||
+      'Error al enviar el código.';
 
-      const { data } =
-        await api.post(
-          '/forgot-password',
-          {
-            email:
-              correoRecuperacion.value.trim()
-          }
-        );
+  } finally {
 
-
-      mensajeRecuperacion.value =
-        data.message;
-
-
-      pasoRecuperacion.value =
-        2;
-
-
-    } catch (error) {
-
-      errorRecuperacion.value =
-        true;
-
-
-      mensajeRecuperacion.value =
-        error.response?.data?.message ||
-        'Error al enviar el código.';
-
-
-    } finally {
-
-      cargandoRecuperacion.value =
-        false;
-    }
-  };
+    cargandoRecuperacion.value =
+      false;
+  }
+};
 
 
 const restablecerContrasena =
-  async () => {
+async () => {
+
+  errorRecuperacion.value =
+    false;
+
+
+  mensajeRecuperacion.value =
+    '';
+
+
+  if (
+    passwordNueva.value !==
+    passwordNuevaConfirmar.value
+  ) {
 
     errorRecuperacion.value =
-      false;
-
-    mensajeRecuperacion.value =
-      '';
-
-
-    if (
-      passwordNueva.value !==
-      passwordNuevaConfirmar.value
-    ) {
-
-      errorRecuperacion.value =
-        true;
-
-      mensajeRecuperacion.value =
-        'Las contraseñas no coinciden.';
-
-      return;
-    }
-
-
-    cargandoRecuperacion.value =
       true;
 
+    mensajeRecuperacion.value =
+      'Las contraseñas no coinciden.';
 
-    try {
-
-      const { data } =
-        await api.post(
-          '/reset-password',
-          {
-
-            email:
-              correoRecuperacion.value.trim(),
-
-            codigo:
-              codigoRecuperacion.value
-                .trim()
-                .toUpperCase(),
-
-            password:
-              passwordNueva.value,
-
-            password_confirmation:
-              passwordNuevaConfirmar.value,
-          }
-        );
+    return;
+  }
 
 
-      mensajeRecuperacion.value =
-        data.message;
+  cargandoRecuperacion.value =
+    true;
 
 
-      setTimeout(() => {
+  try {
+
+    const { data } =
+      await api.post(
+        '/reset-password',
+        {
+          email:
+            correoRecuperacion.value
+              .trim(),
+
+          codigo:
+            codigoRecuperacion.value
+              .trim()
+              .toUpperCase(),
+
+          password:
+            passwordNueva.value,
+
+          password_confirmation:
+            passwordNuevaConfirmar.value
+        }
+      );
+
+
+    mensajeRecuperacion.value =
+      data?.message
+      ||
+      'Contraseña actualizada.';
+
+
+    setTimeout(
+      () => {
+
+        pasoRecuperacion.value =
+          1;
+
+        correoRecuperacion.value =
+          '';
+
+        codigoRecuperacion.value =
+          '';
+
+        passwordNueva.value =
+          '';
+
+        passwordNuevaConfirmar.value =
+          '';
 
         vistaActiva.value =
           'login';
 
-      }, 1500);
+      },
+      2000
+    );
+
+  } catch (error) {
+
+    errorRecuperacion.value =
+      true;
 
 
-    } catch (error) {
+    mensajeRecuperacion.value =
+      error.response
+        ?.data
+        ?.message
+      ||
+      'No se pudo restablecer la contraseña.';
 
-      errorRecuperacion.value =
-        true;
+  } finally {
 
-
-      mensajeRecuperacion.value =
-        error.response?.data?.message ||
-        'No se pudo restablecer la contraseña.';
-
-
-    } finally {
-
-      cargandoRecuperacion.value =
-        false;
-    }
-  };
+    cargandoRecuperacion.value =
+      false;
+  }
+};
 
 
-/*
-|--------------------------------------------------------------------------
-| FORMATO DE FECHA
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   FORMATEAR FECHA
+========================================================= */
 
-const formatearFecha = (fecha) => {
+const formatearFecha =
+(fecha) => {
 
   if (!fecha) {
-    return 'Fecha no disponible';
+    return '';
   }
 
 
-  return new Date(
-    `${fecha}T00:00:00`
-  ).toLocaleDateString(
-    'es-MX',
-    {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    }
-  );
+  const fechaObjeto =
+    new Date(fecha);
+
+
+  if (
+    Number.isNaN(
+      fechaObjeto.getTime()
+    )
+  ) {
+
+    return fecha;
+  }
+
+
+  return fechaObjeto
+    .toLocaleDateString(
+      'es-MX',
+      {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }
+    );
 };
+
+
+/* =========================================================
+   CICLO DE VIDA
+========================================================= */
+
+onMounted(() => {
+
+  /*
+  |--------------------------------------------------------------------------
+  | Iniciamos únicamente la animación de fondo.
+  |--------------------------------------------------------------------------
+  */
+
+  cambiarFondoAutomatico();
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Después comprobamos la sesión real con Laravel.
+  |
+  | Esto elimina el problema de entrar automáticamente al SuperAdmin
+  | por un auth_user antiguo guardado en el navegador.
+  |--------------------------------------------------------------------------
+  */
+
+  restaurarSesion();
+});
+
+
+onUnmounted(() => {
+
+  if (
+    intervaloFondo
+  ) {
+
+    clearInterval(
+      intervaloFondo
+    );
+  }
+});
 </script>
 
 
 <template>
-
   <div class="min-h-screen font-sans">
 
-
-    <!-- =========================================================
-         PANTALLAS PÚBLICAS
-    ========================================================== -->
-
     <div
-      v-if="
-        [
-          'inicio',
-          'login',
-          'registro',
-          'verificacion',
-          'recuperar',
-          'convocatoria-publica'
-        ].includes(vistaActiva)
-      "
-      class="
-        min-h-screen
-        flex
-        flex-col
-        items-center
-        justify-between
-        p-4
-        relative
-        overflow-hidden
-        select-none
-      "
+      v-if="['inicio', 'login', 'registro', 'verificacion', 'recuperar', 'convocatoria-publica'].includes(vistaActiva)"
+      class="min-h-screen flex flex-col items-center justify-between p-4 relative overflow-hidden select-none"
     >
 
-
-      <!-- FONDO -->
-
-      <div
-        class="
-          absolute
-          inset-0
-          z-0
-          pointer-events-none
-        "
-      >
+      <div class="absolute inset-0 z-0 pointer-events-none">
 
         <div
           v-for="(img, index) in fondos"
           :key="index"
           :style="{
-            backgroundImage: `url(${img})`
+            backgroundImage:
+              `url(${img})`
           }"
           :class="[
             'absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out',
+
             fondoActivo === index
               ? 'opacity-40 scale-100'
               : 'opacity-0 scale-105'
           ]"
         ></div>
 
-
-        <div
-          class="
-            absolute
-            inset-0
-            bg-[#1C1F26]/30
-          "
-        ></div>
+        <div class="absolute inset-0 bg-[#1C1F26]/30"></div>
 
       </div>
 
@@ -1047,189 +1226,83 @@ const formatearFecha = (fecha) => {
       <div></div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            INICIO
-      ====================================================== -->
+      ==================================================== -->
 
       <div
         v-if="vistaActiva === 'inicio'"
-        class="
-          w-full
-          max-w-md
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        class="w-full max-w-md relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-6
-            text-center
-            flex
-            flex-col
-            items-center
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6 text-center flex flex-col items-center">
 
-          <div
-            class="
-              flex
-              flex-col
-              items-center
-              w-full
-            "
-          >
+          <div class="flex flex-col items-center w-full">
 
-            <div
-              class="
-                max-w-[260px]
-                w-full
-                flex
-                justify-center
-                items-center
-                overflow-hidden
-              "
-            >
+            <div class="max-w-[260px] w-full flex justify-center items-center overflow-hidden">
 
               <img
                 :src="logoUptex"
                 alt="UPTex"
-                class="
-                  w-full
-                  h-auto
-                  object-contain
-                  block
-                "
+                class="w-full h-auto object-contain block"
               />
 
             </div>
 
 
-            <div
-              class="
-                text-[11px]
-                font-bold
-                text-[#00723F]
-                uppercase
-                tracking-[0.25em]
-                mt-4
-                text-center
-              "
-            >
+            <div class="text-[11px] font-bold text-[#00723F] uppercase tracking-[0.25em] mt-4 text-center">
               Universidad Politécnica de Texcoco
             </div>
 
 
-            <div
-              class="
-                w-16
-                h-[2px]
-                bg-[#7A1C33]
-                mt-2
-              "
-            ></div>
+            <div class="w-16 h-[2px] bg-[#7A1C33] mt-2"></div>
 
           </div>
 
 
           <div class="space-y-2">
 
-            <h2
-              class="
-                text-xl
-                font-black
-                text-[#1C1F26]
-                tracking-tight
-                uppercase
-              "
-            >
+            <h2 class="text-xl font-black text-[#1C1F26] tracking-tight uppercase">
+
               Sistema de Control
+
               <span class="text-[#00723F]">
                 de Becas
               </span>
+
             </h2>
 
 
-            <p
-              class="
-                text-xs
-                text-slate-500
-                max-w-xs
-                mx-auto
-                font-medium
-                leading-relaxed
-              "
-            >
+            <p class="text-xs text-slate-500 max-w-xs mx-auto font-medium leading-relaxed">
+
               Portal digital para el registro,
               validación y seguimiento de becas
               de descuento en colegiaturas.
+
             </p>
 
           </div>
 
 
-          <div
-            class="
-              w-full
-              pt-2
-              space-y-2.5
-            "
-          >
+          <div class="w-full pt-2 space-y-2.5">
+
+            <!-- ESTE BOTÓN QUEDA EXACTAMENTE IGUAL -->
 
             <button
               @click="verConvocatoriaPublica"
               type="button"
-              class="
-                bg-white
-                border-2
-                border-[#00723F]
-                text-[#00723F]
-                hover:bg-[#00723F]
-                hover:text-white
-                font-bold
-                text-xs
-                uppercase
-                tracking-wider
-                px-10
-                py-3.5
-                rounded-xl
-                transition-all
-                w-full
-              "
+              class="bg-white border-2 border-[#00723F] text-[#00723F] hover:bg-[#00723F] hover:text-white font-bold text-xs uppercase tracking-wider px-10 py-3.5 rounded-xl transition-all w-full"
             >
               Ver Convocatoria Vigente
             </button>
 
 
+            <!-- ESTE BOTÓN QUEDA EXACTAMENTE IGUAL -->
+
             <button
               @click="cambiarALogin"
               type="button"
-              class="
-                bg-[#00723F]
-                hover:bg-[#005C32]
-                text-white
-                font-bold
-                text-xs
-                uppercase
-                tracking-wider
-                px-10
-                py-3.5
-                rounded-xl
-                shadow-md
-                transition-all
-                w-full
-              "
+              class="bg-[#00723F] hover:bg-[#005C32] text-white font-bold text-xs uppercase tracking-wider px-10 py-3.5 rounded-xl shadow-md transition-all w-full"
             >
               Acceso al Portal
             </button>
@@ -1241,70 +1314,27 @@ const formatearFecha = (fecha) => {
       </div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            CONVOCATORIA PÚBLICA
-      ====================================================== -->
+      ==================================================== -->
 
       <div
-        v-if="
-          vistaActiva ===
-          'convocatoria-publica'
-        "
-        class="
-          w-full
-          max-w-lg
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        v-if="vistaActiva === 'convocatoria-publica'"
+        class="w-full max-w-lg relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-5
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-5">
 
-          <div
-            class="
-              flex
-              justify-between
-              items-start
-            "
-          >
+          <div class="flex justify-between items-start">
 
-            <h3
-              class="
-                text-base
-                font-black
-                text-[#1C1F26]
-                uppercase
-                tracking-tight
-              "
-            >
+            <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
               Convocatoria Vigente
             </h3>
 
 
             <button
               @click="cambiarAInicio"
-              class="
-                text-xs
-                font-bold
-                text-slate-500
-                hover:text-[#00723F]
-                hover:underline
-              "
+              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
             >
               Regresar
             </button>
@@ -1313,52 +1343,29 @@ const formatearFecha = (fecha) => {
 
 
           <div
-            v-if="
-              cargandoConvocatoriasPublicas
-            "
-            class="
-              text-center
-              py-10
-              text-xs
-              text-slate-400
-              font-semibold
-            "
+            v-if="cargandoConvocatoriasPublicas"
+            class="text-center py-10 text-xs text-slate-400 font-semibold"
           >
-            Cargando convocatoria...
+            Cargando...
           </div>
 
 
           <div
             v-else-if="
-              convocatoriasPublicas.length === 0
+              convocatoriasPublicas.length ===
+              0
             "
-            class="
-              text-center
-              py-10
-              space-y-2
-            "
+            class="text-center py-10 space-y-2"
           >
 
-            <p
-              class="
-                text-sm
-                font-bold
-                text-slate-700
-              "
-            >
-              No hay convocatoria activa
-              en este momento.
+            <p class="text-sm font-bold text-slate-700">
+              No hay convocatoria activa en este momento.
             </p>
 
 
-            <p
-              class="
-                text-xs
-                text-slate-400
-              "
-            >
-              Las convocatorias se publican
-              durante el periodo correspondiente.
+            <p class="text-xs text-slate-400">
+              Las convocatorias se publican una vez por cuatrimestre.
+              Vuelve a revisar más adelante.
             </p>
 
           </div>
@@ -1366,145 +1373,69 @@ const formatearFecha = (fecha) => {
 
           <div
             v-else
-            class="
-              space-y-4
-              max-h-[500px]
-              overflow-y-auto
-            "
+            class="space-y-4 max-h-96 overflow-y-auto"
           >
 
             <div
-              v-for="
-                convocatoria
-                in convocatoriasPublicas
-              "
-              :key="convocatoria.id"
-              class="
-                border
-                border-slate-200
-                rounded-2xl
-                p-5
-                space-y-3
-              "
+              v-for="c in convocatoriasPublicas"
+              :key="c.id"
+              class="border border-slate-200 rounded-2xl p-4 space-y-2"
             >
 
-              <span
-                class="
-                  inline-flex
-                  items-center
-                  px-2.5
-                  py-1
-                  rounded-full
-                  text-[10px]
-                  font-bold
-                  bg-[#00723F]/10
-                  text-[#00723F]
-                "
-              >
+              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#00723F]/10 text-[#00723F]">
+
                 {{
-                  convocatoria.periodo?.nombre
-                  ||
-                  'Convocatoria vigente'
+                  c.carrera?.nombre ||
+                  'Todas las carreras'
                 }}
+
               </span>
 
 
-              <h4
-                class="
-                  text-sm
-                  font-black
-                  text-[#1C1F26]
-                "
-              >
+              <h4 class="text-sm font-black text-[#1C1F26]">
+
                 {{
-                  convocatoria.nombre
-                  ||
-                  convocatoria.titulo
+                  c.titulo ||
+                  c.nombre
                 }}
+
               </h4>
 
 
-              <p
-                v-if="
-                  convocatoria.descripcion
-                "
-                class="
-                  text-xs
-                  text-slate-500
-                  leading-relaxed
-                "
-              >
-                {{
-                  convocatoria.descripcion
-                }}
+              <p class="text-xs text-slate-500">
+
+                {{ c.descripcion }}
+
               </p>
 
 
-              <p
-                v-if="
-                  convocatoria.promedio_minimo
-                "
-                class="
-                  text-xs
-                  text-slate-600
-                  font-semibold
-                "
-              >
-                Promedio mínimo:
-                {{
-                  convocatoria.promedio_minimo
-                }}
-              </p>
+              <p class="text-[11px] text-slate-400 font-semibold">
 
-
-              <p
-                v-if="
-                  convocatoria.fecha_cierre
-                "
-                class="
-                  text-[11px]
-                  text-slate-400
-                  font-semibold
-                "
-              >
                 Cierra el
+
                 {{
                   formatearFecha(
-                    convocatoria.fecha_cierre
+                    c.fecha_cierre
                   )
                 }}
+
               </p>
 
 
               <a
                 v-if="
-                  convocatoria.archivo_url
-                  ||
-                  convocatoria.pdf_url
+                  c.pdf_url ||
+                  c.archivo_url
                 "
                 :href="
-                  convocatoria.archivo_url
-                  ||
-                  convocatoria.pdf_url
+                  c.pdf_url ||
+                  c.archivo_url
                 "
                 target="_blank"
                 rel="noopener noreferrer"
-                class="
-                  inline-flex
-                  items-center
-                  justify-center
-                  bg-[#00723F]
-                  hover:bg-[#005C32]
-                  text-white
-                  text-[11px]
-                  font-bold
-                  px-4
-                  py-2.5
-                  rounded-xl
-                  transition-colors
-                "
+                class="inline-block text-[11px] font-bold text-[#00723F] hover:underline"
               >
-                Ver documento oficial (PDF)
+                Ver documento oficial (PDF) →
               </a>
 
             </div>
@@ -1514,20 +1445,9 @@ const formatearFecha = (fecha) => {
 
           <button
             @click="cambiarALogin"
-            class="
-              w-full
-              bg-[#00723F]
-              hover:bg-[#005C32]
-              text-white
-              font-bold
-              py-3
-              rounded-xl
-              text-xs
-              uppercase
-              tracking-wider
-            "
+            class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider"
           >
-            Iniciar sesión
+            Iniciar sesión para solicitar
           </button>
 
         </div>
@@ -1535,65 +1455,25 @@ const formatearFecha = (fecha) => {
       </div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            LOGIN
-      ====================================================== -->
+      ==================================================== -->
 
       <div
         v-if="vistaActiva === 'login'"
-        class="
-          w-full
-          max-w-md
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        class="w-full max-w-md relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-6
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6">
 
-          <div
-            class="
-              flex
-              flex-col
-              items-center
-              pb-2
-              border-b
-              border-slate-100
-            "
-          >
+          <div class="flex flex-col items-center pb-2 border-b border-slate-100">
 
-            <div
-              class="
-                max-w-[160px]
-                w-full
-                overflow-hidden
-              "
-            >
+            <div class="max-w-[160px] w-full overflow-hidden">
 
               <img
                 :src="logoUptex"
                 alt="UPTex"
-                class="
-                  w-full
-                  h-auto
-                  object-contain
-                  block
-                "
+                class="w-full h-auto object-contain block"
               />
 
             </div>
@@ -1601,37 +1481,16 @@ const formatearFecha = (fecha) => {
           </div>
 
 
-          <div
-            class="
-              flex
-              justify-between
-              items-start
-              pt-1
-            "
-          >
+          <div class="flex justify-between items-start pt-1">
 
             <div class="space-y-0.5">
 
-              <h3
-                class="
-                  text-base
-                  font-black
-                  text-[#1C1F26]
-                  uppercase
-                  tracking-tight
-                "
-              >
+              <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
                 Iniciar Sesión
               </h3>
 
 
-              <p
-                class="
-                  text-[11px]
-                  text-slate-500
-                  font-semibold
-                "
-              >
+              <p class="text-[11px] text-slate-500 font-semibold">
                 Ingresa tus credenciales institucionales.
               </p>
 
@@ -1640,13 +1499,7 @@ const formatearFecha = (fecha) => {
 
             <button
               @click="cambiarAInicio"
-              class="
-                text-xs
-                font-bold
-                text-slate-500
-                hover:text-[#00723F]
-                hover:underline
-              "
+              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
             >
               Regresar
             </button>
@@ -1661,16 +1514,7 @@ const formatearFecha = (fecha) => {
 
             <div class="space-y-1">
 
-              <label
-                class="
-                  text-[10px]
-                  font-black
-                  text-slate-700
-                  uppercase
-                  tracking-wider
-                  block
-                "
-              >
+              <label class="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
                 Usuario Institucional
               </label>
 
@@ -1679,22 +1523,8 @@ const formatearFecha = (fecha) => {
                 v-model="correoUsuario"
                 type="email"
                 required
-                autocomplete="email"
-                placeholder="correo@uptex.edu.mx"
-                class="
-                  w-full
-                  bg-slate-50
-                  border
-                  border-slate-200
-                  rounded-xl
-                  px-4
-                  py-3
-                  text-xs
-                  focus:outline-none
-                  focus:border-[#00723F]
-                  text-[#1C1F26]
-                  font-medium
-                "
+                placeholder="correo@alumno.uptex.edu.mx"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F] text-[#1C1F26] font-medium"
               />
 
             </div>
@@ -1702,16 +1532,7 @@ const formatearFecha = (fecha) => {
 
             <div class="space-y-1">
 
-              <label
-                class="
-                  text-[10px]
-                  font-black
-                  text-slate-700
-                  uppercase
-                  tracking-wider
-                  block
-                "
-              >
+              <label class="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
                 Contraseña
               </label>
 
@@ -1720,22 +1541,8 @@ const formatearFecha = (fecha) => {
                 v-model="passwordUsuario"
                 type="password"
                 required
-                autocomplete="current-password"
                 placeholder="••••••••"
-                class="
-                  w-full
-                  bg-slate-50
-                  border
-                  border-slate-200
-                  rounded-xl
-                  px-4
-                  py-3
-                  text-xs
-                  focus:outline-none
-                  focus:border-[#00723F]
-                  text-[#1C1F26]
-                  font-medium
-                "
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F] text-[#1C1F26] font-medium"
               />
 
             </div>
@@ -1745,14 +1552,7 @@ const formatearFecha = (fecha) => {
 
               <span
                 @click="irARecuperar"
-                class="
-                  text-[11px]
-                  text-slate-500
-                  hover:text-[#00723F]
-                  hover:underline
-                  cursor-pointer
-                  font-semibold
-                "
+                class="text-[11px] text-slate-500 hover:text-[#00723F] hover:underline cursor-pointer font-semibold"
               >
                 ¿Olvidaste tu contraseña?
               </span>
@@ -1767,11 +1567,7 @@ const formatearFecha = (fecha) => {
                   ? 'text-[#7A1C33]'
                   : 'text-[#0F766E]'
               "
-              class="
-                text-[11px]
-                font-semibold
-                text-center
-              "
+              class="text-[11px] font-semibold text-center"
             >
               {{ mensajeLogin }}
             </p>
@@ -1780,54 +1576,27 @@ const formatearFecha = (fecha) => {
             <button
               type="submit"
               :disabled="cargandoLogin"
-              class="
-                w-full
-                bg-[#00723F]
-                hover:bg-[#005C32]
-                text-white
-                font-bold
-                py-3.5
-                rounded-xl
-                text-xs
-                uppercase
-                tracking-wider
-                shadow-md
-                disabled:opacity-50
-              "
+              class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-md disabled:opacity-50"
             >
+
               {{
                 cargandoLogin
                   ? 'Validando...'
                   : 'Validar Credenciales'
               }}
+
             </button>
 
 
-            <div
-              class="
-                text-center
-                pt-2
-              "
-            >
+            <div class="text-center pt-2">
 
-              <p
-                class="
-                  text-[11px]
-                  text-slate-500
-                  font-medium
-                "
-              >
+              <p class="text-[11px] text-slate-500 font-medium">
 
                 ¿No tienes una cuenta académica?
 
                 <span
                   @click="cambiarARegistro"
-                  class="
-                    text-[#7A1C33]
-                    font-bold
-                    hover:underline
-                    cursor-pointer
-                  "
+                  class="text-[#7A1C33] font-bold hover:underline cursor-pointer"
                 >
                   Regístrate aquí
                 </span>
@@ -1843,65 +1612,25 @@ const formatearFecha = (fecha) => {
       </div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            REGISTRO
-      ====================================================== -->
+      ==================================================== -->
 
       <div
         v-if="vistaActiva === 'registro'"
-        class="
-          w-full
-          max-w-md
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        class="w-full max-w-md relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-6
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6">
 
-          <div
-            class="
-              flex
-              flex-col
-              items-center
-              pb-2
-              border-b
-              border-slate-100
-            "
-          >
+          <div class="flex flex-col items-center pb-2 border-b border-slate-100">
 
-            <div
-              class="
-                max-w-[160px]
-                w-full
-                overflow-hidden
-              "
-            >
+            <div class="max-w-[160px] w-full overflow-hidden">
 
               <img
                 :src="logoUptex"
                 alt="UPTex"
-                class="
-                  w-full
-                  h-auto
-                  object-contain
-                  block
-                "
+                class="w-full h-auto object-contain block"
               />
 
             </div>
@@ -1909,37 +1638,15 @@ const formatearFecha = (fecha) => {
           </div>
 
 
-          <div
-            class="
-              flex
-              justify-between
-              items-start
-              pt-1
-            "
-          >
+          <div class="flex justify-between items-start pt-1">
 
             <div class="space-y-0.5">
 
-              <h3
-                class="
-                  text-base
-                  font-black
-                  text-[#1C1F26]
-                  uppercase
-                  tracking-tight
-                "
-              >
+              <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
                 Crear Cuenta
               </h3>
 
-
-              <p
-                class="
-                  text-[11px]
-                  text-slate-500
-                  font-semibold
-                "
-              >
+              <p class="text-[11px] text-slate-500 font-semibold">
                 Regístrate con tu correo institucional.
               </p>
 
@@ -1948,13 +1655,7 @@ const formatearFecha = (fecha) => {
 
             <button
               @click="cambiarALogin"
-              class="
-                text-xs
-                font-bold
-                text-slate-500
-                hover:text-[#00723F]
-                hover:underline
-              "
+              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
             >
               Regresar
             </button>
@@ -1972,18 +1673,7 @@ const formatearFecha = (fecha) => {
               type="text"
               required
               placeholder="Nombre completo"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-                focus:outline-none
-                focus:border-[#00723F]
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
             />
 
 
@@ -1992,18 +1682,7 @@ const formatearFecha = (fecha) => {
               type="email"
               required
               placeholder="correo@alumno.uptex.edu.mx"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-                focus:outline-none
-                focus:border-[#00723F]
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
             />
 
 
@@ -2012,18 +1691,7 @@ const formatearFecha = (fecha) => {
               type="password"
               required
               placeholder="Contraseña"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-                focus:outline-none
-                focus:border-[#00723F]
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
             />
 
 
@@ -2032,18 +1700,7 @@ const formatearFecha = (fecha) => {
               type="password"
               required
               placeholder="Confirmar contraseña"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-                focus:outline-none
-                focus:border-[#00723F]
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
             />
 
 
@@ -2054,11 +1711,7 @@ const formatearFecha = (fecha) => {
                   ? 'text-[#7A1C33]'
                   : 'text-[#0F766E]'
               "
-              class="
-                text-[11px]
-                font-semibold
-                text-center
-              "
+              class="text-[11px] font-semibold text-center"
             >
               {{ mensajeRegistro }}
             </p>
@@ -2067,26 +1720,15 @@ const formatearFecha = (fecha) => {
             <button
               type="submit"
               :disabled="cargandoRegistro"
-              class="
-                w-full
-                bg-[#00723F]
-                hover:bg-[#005C32]
-                text-white
-                font-bold
-                py-3.5
-                rounded-xl
-                text-xs
-                uppercase
-                tracking-wider
-                shadow-md
-                disabled:opacity-50
-              "
+              class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-md disabled:opacity-50"
             >
+
               {{
                 cargandoRegistro
                   ? 'Registrando...'
                   : 'Crear Cuenta'
               }}
+
             </button>
 
           </form>
@@ -2096,87 +1738,41 @@ const formatearFecha = (fecha) => {
       </div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            VERIFICACIÓN
-      ====================================================== -->
+      ==================================================== -->
 
       <div
-        v-if="
-          vistaActiva ===
-          'verificacion'
-        "
-        class="
-          w-full
-          max-w-md
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        v-if="vistaActiva === 'verificacion'"
+        class="w-full max-w-md relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-4
-            text-center
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-4 text-center">
 
-          <div
-            class="
-              max-w-[160px]
-              w-full
-              mx-auto
-              overflow-hidden
-            "
-          >
+          <div class="max-w-[160px] w-full mx-auto overflow-hidden">
 
             <img
               :src="logoUptex"
               alt="UPTex"
-              class="
-                w-full
-                h-auto
-                object-contain
-                block
-              "
+              class="w-full h-auto object-contain block"
             />
 
           </div>
 
 
-          <h3
-            class="
-              text-base
-              font-black
-              text-[#1C1F26]
-              uppercase
-              tracking-tight
-            "
-          >
+          <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
             Verifica tu correo
           </h3>
 
 
-          <p
-            class="
-              text-xs
-              text-slate-500
-            "
-          >
+          <p class="text-xs text-slate-500">
+
             Código enviado a
+
             <strong>
               {{ correoParaVerificar }}
             </strong>
+
           </p>
 
 
@@ -2185,22 +1781,7 @@ const formatearFecha = (fecha) => {
             type="text"
             maxlength="6"
             placeholder="ABC123"
-            class="
-              w-full
-              text-center
-              tracking-[0.3em]
-              font-mono
-              uppercase
-              bg-slate-50
-              border
-              border-slate-200
-              rounded-xl
-              px-4
-              py-3
-              text-sm
-              focus:outline-none
-              focus:border-[#00723F]
-            "
+            class="w-full text-center tracking-[0.3em] font-mono uppercase bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#00723F]"
           />
 
 
@@ -2211,10 +1792,7 @@ const formatearFecha = (fecha) => {
                 ? 'text-[#7A1C33]'
                 : 'text-[#0F766E]'
             "
-            class="
-              text-xs
-              font-semibold
-            "
+            class="text-xs font-semibold"
           >
             {{ mensajeVerificacion }}
           </p>
@@ -2223,40 +1801,23 @@ const formatearFecha = (fecha) => {
           <button
             @click="verificarCodigo"
             :disabled="cargandoVerificacion"
-            class="
-              w-full
-              bg-[#00723F]
-              hover:bg-[#005C32]
-              text-white
-              font-bold
-              py-3
-              rounded-xl
-              text-xs
-              uppercase
-              tracking-wider
-              disabled:opacity-50
-            "
+            class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider disabled:opacity-50"
           >
+
             {{
               cargandoVerificacion
                 ? 'Verificando...'
                 : 'Verificar código'
             }}
+
           </button>
 
 
           <button
             @click="reenviarCodigo"
-            class="
-              text-[11px]
-              text-slate-500
-              hover:text-[#00723F]
-              hover:underline
-              font-semibold
-            "
+            class="text-[11px] text-slate-500 hover:text-[#00723F] hover:underline font-semibold"
           >
-            ¿No recibiste el código?
-            Reenviar
+            ¿No recibiste el código? Reenviar
           </button>
 
         </div>
@@ -2264,69 +1825,27 @@ const formatearFecha = (fecha) => {
       </div>
 
 
-      <!-- =====================================================
+      <!-- ===================================================
            RECUPERAR CONTRASEÑA
-      ====================================================== -->
+      ==================================================== -->
 
       <div
-        v-if="
-          vistaActiva ===
-          'recuperar'
-        "
-        class="
-          w-full
-          max-w-md
-          relative
-          z-20
-          flex
-          flex-col
-          items-center
-        "
+        v-if="vistaActiva === 'recuperar'"
+        class="w-full max-w-md relative z-20 flex flex-col items-center"
       >
 
-        <div
-          class="
-            w-full
-            bg-white/97
-            backdrop-blur-md
-            rounded-3xl
-            p-8
-            border
-            border-slate-200/60
-            shadow-2xl
-            space-y-4
-          "
-        >
+        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-4">
 
-          <div
-            class="
-              flex
-              justify-between
-              items-start
-            "
-          >
+          <div class="flex justify-between items-start">
 
-            <h3
-              class="
-                text-base
-                font-black
-                text-[#1C1F26]
-                uppercase
-                tracking-tight
-              "
-            >
+            <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
               Recuperar Contraseña
             </h3>
 
 
             <button
               @click="cambiarALogin"
-              class="
-                text-xs
-                font-bold
-                text-slate-500
-                hover:underline
-              "
+              class="text-xs font-bold text-slate-500 hover:underline"
             >
               Regresar
             </button>
@@ -2336,87 +1855,51 @@ const formatearFecha = (fecha) => {
 
           <div
             v-if="
-              pasoRecuperacion === 1
+              pasoRecuperacion ===
+              1
             "
             class="space-y-4"
           >
 
-            <p
-              class="
-                text-xs
-                text-slate-500
-              "
-            >
-              Ingresa tu correo institucional
-              y te enviaremos un código.
+            <p class="text-xs text-slate-500">
+              Ingresa tu correo institucional y te enviaremos un código.
             </p>
 
 
             <input
-              v-model="
-                correoRecuperacion
-              "
+              v-model="correoRecuperacion"
               type="email"
               required
               placeholder="Correo institucional"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
             />
 
 
             <p
-              v-if="
-                mensajeRecuperacion
-              "
+              v-if="mensajeRecuperacion"
               :class="
                 errorRecuperacion
                   ? 'text-[#7A1C33]'
                   : 'text-[#0F766E]'
               "
-              class="
-                text-[11px]
-                font-semibold
-                text-center
-              "
+              class="text-[11px] font-semibold text-center"
             >
-              {{
-                mensajeRecuperacion
-              }}
+              {{ mensajeRecuperacion }}
             </p>
 
 
             <button
-              @click="
-                enviarCodigoRecuperacion
-              "
-              :disabled="
-                cargandoRecuperacion
-              "
-              class="
-                w-full
-                bg-[#00723F]
-                text-white
-                font-bold
-                py-3
-                rounded-xl
-                text-xs
-                uppercase
-                disabled:opacity-50
-              "
+              @click="enviarCodigoRecuperacion"
+              :disabled="cargandoRecuperacion"
+              class="w-full bg-[#00723F] text-white font-bold py-3 rounded-xl text-xs uppercase disabled:opacity-50"
             >
+
               {{
                 cargandoRecuperacion
                   ? 'Enviando...'
                   : 'Enviar código'
               }}
+
             </button>
 
           </div>
@@ -2424,120 +1907,64 @@ const formatearFecha = (fecha) => {
 
           <div
             v-if="
-              pasoRecuperacion === 2
+              pasoRecuperacion ===
+              2
             "
             class="space-y-4"
           >
 
             <input
-              v-model="
-                codigoRecuperacion
-              "
+              v-model="codigoRecuperacion"
               type="text"
               maxlength="6"
               placeholder="Código (ABC123)"
-              class="
-                w-full
-                text-center
-                tracking-[0.3em]
-                font-mono
-                uppercase
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-sm
-              "
+              class="w-full text-center tracking-[0.3em] font-mono uppercase bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm"
             />
 
 
             <input
-              v-model="
-                passwordNueva
-              "
+              v-model="passwordNueva"
               type="password"
               required
               placeholder="Nueva contraseña"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
             />
 
 
             <input
-              v-model="
-                passwordNuevaConfirmar
-              "
+              v-model="passwordNuevaConfirmar"
               type="password"
               required
               placeholder="Confirmar nueva contraseña"
-              class="
-                w-full
-                bg-slate-50
-                border
-                border-slate-200
-                rounded-xl
-                px-4
-                py-3
-                text-xs
-              "
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
             />
 
 
             <p
-              v-if="
-                mensajeRecuperacion
-              "
+              v-if="mensajeRecuperacion"
               :class="
                 errorRecuperacion
                   ? 'text-[#7A1C33]'
                   : 'text-[#0F766E]'
               "
-              class="
-                text-[11px]
-                font-semibold
-                text-center
-              "
+              class="text-[11px] font-semibold text-center"
             >
-              {{
-                mensajeRecuperacion
-              }}
+              {{ mensajeRecuperacion }}
             </p>
 
 
             <button
-              @click="
-                restablecerContrasena
-              "
-              :disabled="
-                cargandoRecuperacion
-              "
-              class="
-                w-full
-                bg-[#00723F]
-                text-white
-                font-bold
-                py-3
-                rounded-xl
-                text-xs
-                uppercase
-                disabled:opacity-50
-              "
+              @click="restablecerContrasena"
+              :disabled="cargandoRecuperacion"
+              class="w-full bg-[#00723F] text-white font-bold py-3 rounded-xl text-xs uppercase disabled:opacity-50"
             >
+
               {{
                 cargandoRecuperacion
                   ? 'Guardando...'
                   : 'Restablecer contraseña'
               }}
+
             </button>
 
           </div>
@@ -2549,28 +1976,13 @@ const formatearFecha = (fecha) => {
 
       <!-- FOOTER -->
 
-      <footer
-        class="
-          w-full
-          text-center
-          relative
-          z-20
-          pt-6
-        "
-      >
+      <footer class="w-full text-center relative z-20 pt-6">
 
-        <p
-          class="
-            text-[10px]
-            font-bold
-            text-white/95
-            tracking-wide
-            drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]
-          "
-        >
-          © 2026 Universidad Politécnica
-          de Texcoco.
+        <p class="text-[10px] font-bold text-white/95 tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+
+          &copy; 2026 Universidad Politécnica de Texcoco.
           Todos los derechos reservados.
+
         </p>
 
       </footer>
@@ -2578,9 +1990,9 @@ const formatearFecha = (fecha) => {
     </div>
 
 
-    <!-- =========================================================
+    <!-- =====================================================
          DASHBOARDS
-    ========================================================== -->
+    ====================================================== -->
 
     <SuperAdminDashboard
       v-if="
@@ -2622,5 +2034,4 @@ const formatearFecha = (fecha) => {
     />
 
   </div>
-
 </template>

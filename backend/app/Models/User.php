@@ -46,13 +46,27 @@ class User extends Authenticatable
     */
 
     public function carrera()
-    {
-        return $this->belongsTo(
-            Carrera::class,
-            'carrera_id'
-        );
-    }
+{
+    return $this->belongsTo(
+        \App\Models\Carrera::class
+    );
+}
 
+public function grupoRelacion()
+{
+    return $this->belongsTo(
+        \App\Models\Grupo::class,
+        'grupo_id'
+    );
+}
+
+public function gruposTutor()
+{
+    return $this->hasMany(
+        \App\Models\Grupo::class,
+        'tutor_id'
+    );
+}
     /*
     |--------------------------------------------------------------------------
     | SOLICITUDES DEL ALUMNO
