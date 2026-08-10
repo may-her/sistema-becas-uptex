@@ -1,0 +1,90 @@
+
+Report Summary
+
+┌──────────────────────────────────────────────┬─────────────────┬─────────────────┐
+│                    Target                    │      Type       │ Vulnerabilities │
+├──────────────────────────────────────────────┼─────────────────┼─────────────────┤
+│ sistema-becas-uptex-main-app (alpine 3.24.1) │     alpine      │        0        │
+├──────────────────────────────────────────────┼─────────────────┼─────────────────┤
+│ var/www/html/vendor/composer/installed.json  │ composer-vendor │       17        │
+└──────────────────────────────────────────────┴─────────────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+var/www/html/vendor/composer/installed.json (composer-vendor)
+=============================================================
+Total: 17 (UNKNOWN: 0, LOW: 0, MEDIUM: 12, HIGH: 5, CRITICAL: 0)
+
+┌───────────────────┬─────────────────────┬──────────┬────────┬───────────────────┬───────────────┬──────────────────────────────────────────────────────────────┐
+│      Library      │    Vulnerability    │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                             │
+├───────────────────┼─────────────────────┼──────────┼────────┼───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ guzzlehttp/guzzle │ CVE-2026-69246      │ HIGH     │ fixed  │ 7.11.1            │ 7.15.2, 8.0.1 │ Guzzle is an extensible PHP HTTP client. Prior to 7.15.2 and │
+│                   │                     │          │        │                   │               │ 8.0.1,...                                                    │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-69246                   │
+│                   ├─────────────────────┼──────────┤        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-55568      │ MEDIUM   │        │                   │ 7.12.1        │ Guzzle is an extensible PHP HTTP client. Prior to 7.12.1, in │
+│                   │                     │          │        │                   │               │ certain...                                                   │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-55568                   │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-55767      │          │        │                   │               │ Guzzle is an extensible PHP HTTP client. Prior to 7.12.1,    │
+│                   │                     │          │        │                   │               │ CookieJar in...                                              │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-55767                   │
+│                   ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59883      │          │        │                   │ 7.12.3        │ guzzle/guzzle: Guzzle: Cross-host cookie disclosure and      │
+│                   │                     │          │        │                   │               │ injection due to improper domain matching...                 │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-59883                   │
+│                   ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-67339      │          │        │                   │ 7.14.2        │ guzzlehttp/guzzle versions before 7.14.2 fail to properly    │
+│                   │                     │          │        │                   │               │ isolate Prox ...                                             │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-67339                   │
+│                   ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-67353      │          │        │                   │ 7.15.1        │ guzzlehttp/guzzle versions before 7.15.1 contain a denial of │
+│                   │                     │          │        │                   │               │ service v ...                                                │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-67353                   │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-67354      │          │        │                   │               │ guzzlehttp/guzzle versions before 7.15.1 contain an          │
+│                   │                     │          │        │                   │               │ information disclo ...                                       │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-67354                   │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-67355      │          │        │                   │               │ guzzlehttp/guzzle versions before 7.15.1 fail to preserve    │
+│                   │                     │          │        │                   │               │ host-only co ...                                             │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-67355                   │
+│                   ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-69245      │          │        │                   │ 7.15.2, 8.0.1 │ Guzzle is an extensible PHP HTTP client. Prior to 7.15.2 and │
+│                   │                     │          │        │                   │               │ 8.0.1,...                                                    │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-69245                   │
+├───────────────────┼─────────────────────┤          │        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ guzzlehttp/psr7   │ CVE-2026-55766      │          │        │ 2.11.0            │ 2.12.1        │ guzzlehttp/psr7 is a PSR-7 HTTP message library              │
+│                   │                     │          │        │                   │               │ implementation in PHP. ...                                   │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-55766                   │
+│                   ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59882      │          │        │                   │ 2.12.3        │ guzzlehttp/psr7 is a PSR-7 HTTP message library              │
+│                   │                     │          │        │                   │               │ implementation in PHP. ...                                   │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-59882                   │
+├───────────────────┼─────────────────────┼──────────┤        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ league/commonmark │ CVE-2026-71488      │ HIGH     │        │ 2.8.2             │ 2.9.0         │ league/commonmark: Quadratic-time denial of service when     │
+│                   │                     │          │        │                   │               │ parsing crafted Markdown                                     │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-71488                   │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ GHSA-g2gp-3wwq-f4ph │          │        │                   │               │ league/commonmark: Denial of service via adjacent inline     │
+│                   │                     │          │        │                   │               │ attribute blocks                                             │
+│                   │                     │          │        │                   │               │ https://github.com/advisories/GHSA-g2gp-3wwq-f4ph            │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ GHSA-jfm3-95jq-q3rf │          │        │                   │               │ league/commonmark: Denial of service via duplicate footnote  │
+│                   │                     │          │        │                   │               │ definitions                                                  │
+│                   │                     │          │        │                   │               │ https://github.com/advisories/GHSA-jfm3-95jq-q3rf            │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ GHSA-mh25-x5hq-wrqp │          │        │                   │               │ league/commonmark: Denial of service via colliding heading   │
+│                   │                     │          │        │                   │               │ slugs                                                        │
+│                   │                     │          │        │                   │               │ https://github.com/advisories/GHSA-mh25-x5hq-wrqp            │
+│                   ├─────────────────────┼──────────┤        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-71478      │ MEDIUM   │        │                   │               │ league/commonmark: AttributesExtension href/src unsafe-link  │
+│                   │                     │          │        │                   │               │ filter bypass via embedded control bytes                     │
+│                   │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-71478                   │
+│                   ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                   │ GHSA-mj63-m3rc-8ppr │          │        │                   │               │ league/commonmark: Denial of service via deeply nested XML   │
+│                   │                     │          │        │                   │               │ output                                                       │
+│                   │                     │          │        │                   │               │ https://github.com/advisories/GHSA-mj63-m3rc-8ppr            │
+└───────────────────┴─────────────────────┴──────────┴────────┴───────────────────┴───────────────┴──────────────────────────────────────────────────────────────┘
