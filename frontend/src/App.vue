@@ -1,5 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import {
+  ref,
+  onMounted,
+  onUnmounted
+} from 'vue';
+
 import api from './api/axios';
 
 import logoUptex from './assets/logo-uptex.png';
@@ -7,10 +12,23 @@ import campus1 from './assets/universidad1.jpg';
 import campus2 from './assets/universidad2.jpg';
 import campus3 from './assets/universidad3.jpg';
 
-import SuperAdminDashboard from './components/SuperAdminDashboard.vue';
-import JefeDashboard from './components/JefeDashboard.vue';
-import TutorDashboard from './components/TutorDashboard.vue';
-import AlumnoDashboard from './components/AlumnoDashboard.vue';
+import SuperAdminDashboard
+  from './components/SuperAdminDashboard.vue';
+
+import JefeDashboard
+  from './components/JefeDashboard.vue';
+
+import TutorDashboard
+  from './components/TutorDashboard.vue';
+
+import AlumnoDashboard
+  from './components/AlumnoDashboard.vue';
+
+import TwoFactorSetup
+  from './views/TwoFactorSetup.vue';
+
+import TwoFactorChallenge
+  from './views/TwoFactorChallenge.vue';
 
 
 /* =========================================================
@@ -27,44 +45,115 @@ const fondoActivo = ref(0);
 
 let intervaloFondo = null;
 
-
 const cambiarFondoAutomatico = () => {
 
-  intervaloFondo = setInterval(() => {
+  intervaloFondo =
+    setInterval(() => {
 
-    fondoActivo.value =
-      (
-        fondoActivo.value + 1
-      ) % fondos.value.length;
+      fondoActivo.value =
+        (
+          fondoActivo.value + 1
+        ) % fondos.value.length;
 
-  }, 4000);
+    }, 4000);
 };
 
 
 /* =========================================================
-   VISTA PRINCIPAL
+   VISTA
 ========================================================= */
 
-const vistaActiva = ref('inicio');
+const vistaActiva =
+  ref('inicio');
 
-const usuarioActivo = ref(null);
+const usuarioActivo =
+  ref(null);
 
+
+/* =========================================================
+   2FA
+========================================================= */
+
+const twoFactorChallengeToken =
+  ref('');
+
+
+const abrirTwoFactorSetup = () => {
+
+  if (!usuarioActivo.value) {
+    return;
+  }
+
+  vistaActiva.value =
+    'two-factor-setup';
+};
+
+
+const cancelarTwoFactorChallenge = () => {
+
+  twoFactorChallengeToken.value =
+    '';
+
+  vistaActiva.value =
+    'login';
+};
+
+
+const completarTwoFactor = (data) => {
+
+  if (
+    !data?.token ||
+    !data?.user
+  ) {
+    return;
+  }
+
+  localStorage.setItem(
+    'auth_token',
+    data.token
+  );
+
+  localStorage.setItem(
+    'auth_user',
+    JSON.stringify(
+      data.user
+    )
+  );
+
+  usuarioActivo.value =
+    data.user;
+
+  twoFactorChallengeToken.value =
+    '';
+
+  redirigirSegunRol(
+    data.user.role
+  );
+};
+
+
+/* =========================================================
+   CAMBIO DE VISTAS
+========================================================= */
 
 const cambiarALogin = () => {
 
-  vistaActiva.value = 'login';
+  vistaActiva.value =
+    'login';
 };
 
 
 const cambiarAInicio = () => {
 
-  vistaActiva.value = 'inicio';
+  vistaActiva.value =
+    'inicio';
 };
 
 
 const cambiarARegistro = () => {
 
-  vistaActiva.value = 'registro';
+  vistaActiva.value =
+    'registro';
 };
 
 
@@ -75,27 +164,17 @@ const cambiarARegistro = () => {
 const redirigirSegunRol = (role) => {
 
   const rol =
-    String(role || '')
+    String(
+      role || ''
+    )
       .trim()
       .toLowerCase();
 
 
   const rutas = {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Rol real actual de tu BD
-    |--------------------------------------------------------------------------
-    */
-
     superadmin:
       'panel-master',
-
-    /*
-    |--------------------------------------------------------------------------
-    | Lo dejamos por compatibilidad si existiera algún usuario antiguo.
-    |--------------------------------------------------------------------------
-    */
 
     master:
       'panel-master',
@@ -118,9 +197,11 @@ const redirigirSegunRol = (role) => {
       rol
     );
 
-    usuarioActivo.value = null;
+    usuarioActivo.value =
+      null;
 
-    vistaActiva.value = 'inicio';
+    vistaActiva.value =
+      'inicio';
 
     return;
   }
@@ -134,25 +215,6 @@ const redirigirSegunRol = (role) => {
 /* =========================================================
    RESTAURAR SESIÓN
 ========================================================= */
-
-/*
-|--------------------------------------------------------------------------
-| IMPORTANTE
-|--------------------------------------------------------------------------
-|
-| Antes:
-|
-| Si había auth_token + auth_user en localStorage,
-| App.vue confiaba directamente en esos datos y abría el dashboard.
-|
-| Ahora:
-|
-| 1. Busca el token.
-| 2. Si no existe, va a inicio.
-| 3. Si existe, Laravel valida el token con GET /api/user.
-| 4. Sólo si Laravel confirma el usuario, abre el dashboard.
-|
-*/
 
 const restaurarSesion = async () => {
 
@@ -186,18 +248,6 @@ const restaurarSesion = async () => {
       );
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Dependiendo de cómo responda tu endpoint:
-    |
-    | { user: {...} }
-    |
-    | { data: {...} }
-    |
-    | o directamente {...}
-    |--------------------------------------------------------------------------
-    */
-
     const usuario =
       data?.user
       ||
@@ -207,10 +257,8 @@ const restaurarSesion = async () => {
 
 
     if (
-      !usuario
-      ||
-      !usuario.id
-      ||
+      !usuario ||
+      !usuario.id ||
       !usuario.role
     ) {
 
@@ -244,13 +292,6 @@ const restaurarSesion = async () => {
     );
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Si el token ya venció o es inválido,
-    | eliminamos cualquier sesión vieja.
-    |--------------------------------------------------------------------------
-    */
-
     localStorage.removeItem(
       'auth_token'
     );
@@ -281,7 +322,8 @@ const cargandoConvocatoriasPublicas =
   ref(false);
 
 
-const verConvocatoriaPublica = async () => {
+const verConvocatoriaPublica =
+async () => {
 
   vistaActiva.value =
     'convocatoria-publica';
@@ -299,13 +341,6 @@ const verConvocatoriaPublica = async () => {
       );
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Tu código original esperaba data.convocatorias.
-    | Dejamos compatibilidad con otras respuestas.
-    |--------------------------------------------------------------------------
-    */
-
     convocatoriasPublicas.value =
       data?.convocatorias
       ||
@@ -320,7 +355,7 @@ const verConvocatoriaPublica = async () => {
   } catch (error) {
 
     console.error(
-      'Error cargando convocatorias públicas:',
+      'Error cargando convocatorias:',
       error
     );
 
@@ -386,15 +421,50 @@ const manejarLogin = async () => {
 
     /*
     |--------------------------------------------------------------------------
-    | Comprobamos que Laravel realmente devolvió token + user.
+    | 2FA REQUERIDO
     |--------------------------------------------------------------------------
     */
 
     if (
-      !data?.token
-      ||
-      !data?.user
-      ||
+      data?.two_factor_required ===
+      true
+    ) {
+
+      if (
+        !data?.challenge_token
+      ) {
+
+        throw new Error(
+          'No se recibió el desafío 2FA.'
+        );
+      }
+
+
+      twoFactorChallengeToken.value =
+        data.challenge_token;
+
+
+      vistaActiva.value =
+        'two-factor-challenge';
+
+
+      mensajeLogin.value =
+        'Introduce el código de tu aplicación autenticadora.';
+
+
+      return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | LOGIN SIN 2FA
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      !data?.token ||
+      !data?.user ||
       !data?.user?.role
     ) {
 
@@ -404,23 +474,11 @@ const manejarLogin = async () => {
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Guardamos token primero.
-    |--------------------------------------------------------------------------
-    */
-
     localStorage.setItem(
       'auth_token',
       data.token
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Guardamos usuario sólo después de validar respuesta.
-    |--------------------------------------------------------------------------
-    */
 
     localStorage.setItem(
       'auth_user',
@@ -434,12 +492,6 @@ const manejarLogin = async () => {
       data.user;
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Redirige según el rol REAL.
-    |--------------------------------------------------------------------------
-    */
-
     redirigirSegunRol(
       data.user.role
     );
@@ -451,12 +503,6 @@ const manejarLogin = async () => {
       error
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Si falló el login, no dejamos basura de una sesión anterior.
-    |--------------------------------------------------------------------------
-    */
 
     localStorage.removeItem(
       'auth_token'
@@ -496,6 +542,8 @@ const manejarLogin = async () => {
     } else {
 
       mensajeLogin.value =
+        error.message
+        ||
         'Error al iniciar sesión.';
     }
 
@@ -515,12 +563,6 @@ const cerrarSesion = async () => {
 
   try {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Si existe token, Laravel lo revoca.
-    |--------------------------------------------------------------------------
-    */
-
     if (
       localStorage.getItem(
         'auth_token'
@@ -534,14 +576,8 @@ const cerrarSesion = async () => {
 
   } catch (error) {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Aunque falle el backend, limpiamos la sesión local.
-    |--------------------------------------------------------------------------
-    */
-
     console.warn(
-      'Error cerrando sesión en backend:',
+      'Error cerrando sesión:',
       error
     );
   }
@@ -566,12 +602,14 @@ const cerrarSesion = async () => {
   passwordUsuario.value =
     '';
 
-
   mensajeLogin.value =
     '';
 
   errorLogin.value =
     false;
+
+  twoFactorChallengeToken.value =
+    '';
 
 
   vistaActiva.value =
@@ -639,6 +677,7 @@ const manejarRegistro = async () => {
       await api.post(
         '/register',
         {
+
           name:
             nombreRegistro.value
               .trim(),
@@ -666,13 +705,6 @@ const manejarRegistro = async () => {
       ||
       'Cuenta registrada correctamente.';
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | No iniciamos sesión automáticamente.
-    | Primero verifica correo.
-    |--------------------------------------------------------------------------
-    */
 
     vistaActiva.value =
       'verificacion';
@@ -779,7 +811,7 @@ const verificarCodigo = async () => {
           'login';
 
       },
-      2000
+      1500
     );
 
   } catch (error) {
@@ -870,7 +902,7 @@ const reenviarCodigo = async () => {
 
 
 /* =========================================================
-   RECUPERAR CONTRASEÑA
+   RECUPERACIÓN
 ========================================================= */
 
 const correoRecuperacion =
@@ -903,30 +935,23 @@ const irARecuperar = () => {
   vistaActiva.value =
     'recuperar';
 
-
   pasoRecuperacion.value =
     1;
-
 
   mensajeRecuperacion.value =
     '';
 
-
   errorRecuperacion.value =
     false;
-
 
   correoRecuperacion.value =
     '';
 
-
   codigoRecuperacion.value =
     '';
 
-
   passwordNueva.value =
     '';
-
 
   passwordNuevaConfirmar.value =
     '';
@@ -938,7 +963,6 @@ async () => {
 
   errorRecuperacion.value =
     false;
-
 
   mensajeRecuperacion.value =
     '';
@@ -1012,7 +1036,6 @@ async () => {
   errorRecuperacion.value =
     false;
 
-
   mensajeRecuperacion.value =
     '';
 
@@ -1042,6 +1065,7 @@ async () => {
       await api.post(
         '/reset-password',
         {
+
           email:
             correoRecuperacion.value
               .trim(),
@@ -1072,23 +1096,11 @@ async () => {
         pasoRecuperacion.value =
           1;
 
-        correoRecuperacion.value =
-          '';
-
-        codigoRecuperacion.value =
-          '';
-
-        passwordNueva.value =
-          '';
-
-        passwordNuevaConfirmar.value =
-          '';
-
         vistaActiva.value =
           'login';
 
       },
-      2000
+      1500
     );
 
   } catch (error) {
@@ -1113,40 +1125,40 @@ async () => {
 
 
 /* =========================================================
-   FORMATEAR FECHA
+   FECHAS
 ========================================================= */
 
-const formatearFecha =
-(fecha) => {
+const formatearFecha = (fecha) => {
 
   if (!fecha) {
     return '';
   }
 
-
-  const fechaObjeto =
+  const valor =
     new Date(fecha);
-
 
   if (
     Number.isNaN(
-      fechaObjeto.getTime()
+      valor.getTime()
     )
   ) {
 
     return fecha;
   }
 
+  return valor.toLocaleDateString(
+    'es-MX',
+    {
+      day:
+        'numeric',
 
-  return fechaObjeto
-    .toLocaleDateString(
-      'es-MX',
-      {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      }
-    );
+      month:
+        'long',
+
+      year:
+        'numeric'
+    }
+  );
 };
 
 
@@ -1156,23 +1168,7 @@ const formatearFecha =
 
 onMounted(() => {
 
-  /*
-  |--------------------------------------------------------------------------
-  | Iniciamos únicamente la animación de fondo.
-  |--------------------------------------------------------------------------
-  */
-
   cambiarFondoAutomatico();
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | Después comprobamos la sesión real con Laravel.
-  |
-  | Esto elimina el problema de entrar automáticamente al SuperAdmin
-  | por un auth_user antiguo guardado en el navegador.
-  |--------------------------------------------------------------------------
-  */
 
   restaurarSesion();
 });
@@ -1193,32 +1189,60 @@ onUnmounted(() => {
 
 
 <template>
-  <div class="min-h-screen font-sans">
+
+  <div
+    class="min-h-screen font-sans"
+  >
+
+
+    <!-- =====================================================
+         PÁGINAS PÚBLICAS
+    ====================================================== -->
 
     <div
-      v-if="['inicio', 'login', 'registro', 'verificacion', 'recuperar', 'convocatoria-publica'].includes(vistaActiva)"
-      class="min-h-screen flex flex-col items-center justify-between p-4 relative overflow-hidden select-none"
+      v-if="
+        [
+          'inicio',
+          'login',
+          'registro',
+          'verificacion',
+          'recuperar',
+          'convocatoria-publica'
+        ].includes(vistaActiva)
+      "
+      class="min-h-screen flex flex-col items-center justify-between p-4 relative overflow-hidden"
     >
 
-      <div class="absolute inset-0 z-0 pointer-events-none">
+
+      <!-- FONDO -->
+
+      <div
+        class="absolute inset-0 z-0 pointer-events-none"
+      >
 
         <div
-          v-for="(img, index) in fondos"
+          v-for="
+            (img, index)
+            in fondos
+          "
           :key="index"
           :style="{
             backgroundImage:
               `url(${img})`
           }"
           :class="[
-            'absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out',
+            'absolute inset-0 bg-cover bg-center transition-opacity duration-1000',
 
             fondoActivo === index
-              ? 'opacity-40 scale-100'
-              : 'opacity-0 scale-105'
+              ? 'opacity-40'
+              : 'opacity-0'
           ]"
         ></div>
 
-        <div class="absolute inset-0 bg-[#1C1F26]/30"></div>
+
+        <div
+          class="absolute inset-0 bg-[#1C1F26]/40"
+        ></div>
 
       </div>
 
@@ -1231,83 +1255,62 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'inicio'"
-        class="w-full max-w-md relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'inicio'
+        "
+        class="w-full max-w-md relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6 text-center flex flex-col items-center">
+        <div
+          class="bg-white rounded-3xl p-8 shadow-2xl text-center space-y-6"
+        >
 
-          <div class="flex flex-col items-center w-full">
-
-            <div class="max-w-[260px] w-full flex justify-center items-center overflow-hidden">
-
-              <img
-                :src="logoUptex"
-                alt="UPTex"
-                class="w-full h-auto object-contain block"
-              />
-
-            </div>
+          <img
+            :src="logoUptex"
+            alt="UPTex"
+            class="w-64 mx-auto"
+          />
 
 
-            <div class="text-[11px] font-bold text-[#00723F] uppercase tracking-[0.25em] mt-4 text-center">
-              Universidad Politécnica de Texcoco
-            </div>
-
-
-            <div class="w-16 h-[2px] bg-[#7A1C33] mt-2"></div>
-
-          </div>
-
-
-          <div class="space-y-2">
-
-            <h2 class="text-xl font-black text-[#1C1F26] tracking-tight uppercase">
-
-              Sistema de Control
-
-              <span class="text-[#00723F]">
-                de Becas
-              </span>
-
-            </h2>
-
-
-            <p class="text-xs text-slate-500 max-w-xs mx-auto font-medium leading-relaxed">
-
-              Portal digital para el registro,
-              validación y seguimiento de becas
-              de descuento en colegiaturas.
-
-            </p>
-
-          </div>
-
-
-          <div class="w-full pt-2 space-y-2.5">
-
-            <!-- ESTE BOTÓN QUEDA EXACTAMENTE IGUAL -->
-
-            <button
-              @click="verConvocatoriaPublica"
-              type="button"
-              class="bg-white border-2 border-[#00723F] text-[#00723F] hover:bg-[#00723F] hover:text-white font-bold text-xs uppercase tracking-wider px-10 py-3.5 rounded-xl transition-all w-full"
+          <h1
+            class="text-xl font-black"
+          >
+            Sistema de Control
+            <span
+              class="text-[#00723F]"
             >
-              Ver Convocatoria Vigente
-            </button>
+              de Becas
+            </span>
+          </h1>
 
 
-            <!-- ESTE BOTÓN QUEDA EXACTAMENTE IGUAL -->
+          <p
+            class="text-xs text-slate-500"
+          >
+            Universidad Politécnica
+            de Texcoco
+          </p>
 
-            <button
-              @click="cambiarALogin"
-              type="button"
-              class="bg-[#00723F] hover:bg-[#005C32] text-white font-bold text-xs uppercase tracking-wider px-10 py-3.5 rounded-xl shadow-md transition-all w-full"
-            >
-              Acceso al Portal
-            </button>
 
-          </div>
+          <button
+            @click="
+              verConvocatoriaPublica
+            "
+            class="w-full border-2 border-[#00723F] text-[#00723F] py-3 rounded-xl font-bold text-xs uppercase"
+          >
+            Ver Convocatoria Vigente
+          </button>
+
+
+          <button
+            @click="
+              cambiarALogin
+            "
+            class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase"
+          >
+            Acceso al Portal
+          </button>
 
         </div>
 
@@ -1315,26 +1318,37 @@ onUnmounted(() => {
 
 
       <!-- ===================================================
-           CONVOCATORIA PÚBLICA
+           CONVOCATORIA
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'convocatoria-publica'"
-        class="w-full max-w-lg relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'convocatoria-publica'
+        "
+        class="w-full max-w-lg relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-5">
+        <div
+          class="bg-white rounded-3xl p-8 shadow-2xl space-y-5"
+        >
 
-          <div class="flex justify-between items-start">
+          <div
+            class="flex justify-between"
+          >
 
-            <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
+            <h2
+              class="font-black uppercase"
+            >
               Convocatoria Vigente
-            </h3>
+            </h2>
 
 
             <button
-              @click="cambiarAInicio"
-              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
+              @click="
+                cambiarAInicio
+              "
+              class="text-xs text-[#00723F] font-bold"
             >
               Regresar
             </button>
@@ -1342,112 +1356,86 @@ onUnmounted(() => {
           </div>
 
 
-          <div
-            v-if="cargandoConvocatoriasPublicas"
-            class="text-center py-10 text-xs text-slate-400 font-semibold"
+          <p
+            v-if="
+              cargandoConvocatoriasPublicas
+            "
+            class="text-center text-sm"
           >
             Cargando...
-          </div>
+          </p>
 
 
-          <div
+          <p
             v-else-if="
               convocatoriasPublicas.length ===
               0
             "
-            class="text-center py-10 space-y-2"
+            class="text-center text-sm"
           >
-
-            <p class="text-sm font-bold text-slate-700">
-              No hay convocatoria activa en este momento.
-            </p>
-
-
-            <p class="text-xs text-slate-400">
-              Las convocatorias se publican una vez por cuatrimestre.
-              Vuelve a revisar más adelante.
-            </p>
-
-          </div>
+            No hay convocatoria activa.
+          </p>
 
 
           <div
             v-else
-            class="space-y-4 max-h-96 overflow-y-auto"
+            class="space-y-3"
           >
 
-            <div
-              v-for="c in convocatoriasPublicas"
-              :key="c.id"
-              class="border border-slate-200 rounded-2xl p-4 space-y-2"
+            <article
+              v-for="
+                convocatoria
+                in convocatoriasPublicas
+              "
+              :key="
+                convocatoria.id
+              "
+              class="border rounded-xl p-4"
             >
 
-              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#00723F]/10 text-[#00723F]">
-
+              <h3
+                class="font-bold"
+              >
                 {{
-                  c.carrera?.nombre ||
-                  'Todas las carreras'
+                  convocatoria.titulo
+                  ||
+                  convocatoria.nombre
                 }}
+              </h3>
 
-              </span>
 
-
-              <h4 class="text-sm font-black text-[#1C1F26]">
-
+              <p
+                class="text-xs text-slate-500"
+              >
                 {{
-                  c.titulo ||
-                  c.nombre
+                  convocatoria.descripcion
                 }}
-
-              </h4>
-
-
-              <p class="text-xs text-slate-500">
-
-                {{ c.descripcion }}
-
               </p>
 
 
-              <p class="text-[11px] text-slate-400 font-semibold">
-
-                Cierra el
-
+              <p
+                class="text-xs mt-2"
+              >
+                Cierre:
                 {{
                   formatearFecha(
-                    c.fecha_cierre
+                    convocatoria.fecha_cierre
                   )
                 }}
-
               </p>
 
-
-              <a
-                v-if="
-                  c.pdf_url ||
-                  c.archivo_url
-                "
-                :href="
-                  c.pdf_url ||
-                  c.archivo_url
-                "
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-block text-[11px] font-bold text-[#00723F] hover:underline"
-              >
-                Ver documento oficial (PDF) →
-              </a>
-
-            </div>
+            </article>
 
           </div>
 
 
           <button
-            @click="cambiarALogin"
-            class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider"
+            @click="
+              cambiarALogin
+            "
+            class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase"
           >
-            Iniciar sesión para solicitar
+            Iniciar sesión
           </button>
 
         </div>
@@ -1460,46 +1448,50 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'login'"
-        class="w-full max-w-md relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'login'
+        "
+        class="w-full max-w-md relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6">
+        <div
+          class="bg-white rounded-3xl p-8 shadow-2xl space-y-5"
+        >
 
-          <div class="flex flex-col items-center pb-2 border-b border-slate-100">
-
-            <div class="max-w-[160px] w-full overflow-hidden">
-
-              <img
-                :src="logoUptex"
-                alt="UPTex"
-                class="w-full h-auto object-contain block"
-              />
-
-            </div>
-
-          </div>
+          <img
+            :src="logoUptex"
+            alt="UPTex"
+            class="w-40 mx-auto"
+          />
 
 
-          <div class="flex justify-between items-start pt-1">
+          <div
+            class="flex justify-between"
+          >
 
-            <div class="space-y-0.5">
+            <div>
 
-              <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
+              <h2
+                class="font-black uppercase"
+              >
                 Iniciar Sesión
-              </h3>
+              </h2>
 
-
-              <p class="text-[11px] text-slate-500 font-semibold">
-                Ingresa tus credenciales institucionales.
+              <p
+                class="text-xs text-slate-500"
+              >
+                Credenciales institucionales
               </p>
 
             </div>
 
 
             <button
-              @click="cambiarAInicio"
-              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
+              @click="
+                cambiarAInicio
+              "
+              class="text-xs text-[#00723F]"
             >
               Regresar
             </button>
@@ -1508,66 +1500,55 @@ onUnmounted(() => {
 
 
           <form
-            @submit.prevent="manejarLogin"
+            @submit.prevent="
+              manejarLogin
+            "
             class="space-y-4"
           >
 
-            <div class="space-y-1">
-
-              <label class="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
-                Usuario Institucional
-              </label>
-
-
-              <input
-                v-model="correoUsuario"
-                type="email"
-                required
-                placeholder="correo@alumno.uptex.edu.mx"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F] text-[#1C1F26] font-medium"
-              />
-
-            </div>
+            <input
+              v-model="
+                correoUsuario
+              "
+              type="email"
+              required
+              placeholder="Correo institucional"
+              class="w-full border rounded-xl px-4 py-3 text-sm"
+            />
 
 
-            <div class="space-y-1">
-
-              <label class="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
-                Contraseña
-              </label>
-
-
-              <input
-                v-model="passwordUsuario"
-                type="password"
-                required
-                placeholder="••••••••"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F] text-[#1C1F26] font-medium"
-              />
-
-            </div>
+            <input
+              v-model="
+                passwordUsuario
+              "
+              type="password"
+              required
+              placeholder="Contraseña"
+              class="w-full border rounded-xl px-4 py-3 text-sm"
+            />
 
 
-            <p class="text-right">
-
-              <span
-                @click="irARecuperar"
-                class="text-[11px] text-slate-500 hover:text-[#00723F] hover:underline cursor-pointer font-semibold"
-              >
-                ¿Olvidaste tu contraseña?
-              </span>
-
-            </p>
+            <button
+              type="button"
+              @click="
+                irARecuperar
+              "
+              class="text-xs text-slate-500 hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
 
 
             <p
-              v-if="mensajeLogin"
+              v-if="
+                mensajeLogin
+              "
               :class="
                 errorLogin
-                  ? 'text-[#7A1C33]'
-                  : 'text-[#0F766E]'
+                  ? 'text-red-700'
+                  : 'text-green-700'
               "
-              class="text-[11px] font-semibold text-center"
+              class="text-xs text-center font-bold"
             >
               {{ mensajeLogin }}
             </p>
@@ -1575,8 +1556,10 @@ onUnmounted(() => {
 
             <button
               type="submit"
-              :disabled="cargandoLogin"
-              class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-md disabled:opacity-50"
+              :disabled="
+                cargandoLogin
+              "
+              class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold text-xs uppercase disabled:opacity-50"
             >
 
               {{
@@ -1588,22 +1571,23 @@ onUnmounted(() => {
             </button>
 
 
-            <div class="text-center pt-2">
+            <p
+              class="text-center text-xs"
+            >
 
-              <p class="text-[11px] text-slate-500 font-medium">
+              ¿No tienes cuenta?
 
-                ¿No tienes una cuenta académica?
+              <button
+                type="button"
+                @click="
+                  cambiarARegistro
+                "
+                class="text-[#7A1C33] font-bold"
+              >
+                Regístrate
+              </button>
 
-                <span
-                  @click="cambiarARegistro"
-                  class="text-[#7A1C33] font-bold hover:underline cursor-pointer"
-                >
-                  Regístrate aquí
-                </span>
-
-              </p>
-
-            </div>
+            </p>
 
           </form>
 
@@ -1617,123 +1601,107 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'registro'"
-        class="w-full max-w-md relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'registro'
+        "
+        class="w-full max-w-md relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-6">
+        <form
+          @submit.prevent="
+            manejarRegistro
+          "
+          class="bg-white rounded-3xl p-8 shadow-2xl space-y-4"
+        >
 
-          <div class="flex flex-col items-center pb-2 border-b border-slate-100">
-
-            <div class="max-w-[160px] w-full overflow-hidden">
-
-              <img
-                :src="logoUptex"
-                alt="UPTex"
-                class="w-full h-auto object-contain block"
-              />
-
-            </div>
-
-          </div>
-
-
-          <div class="flex justify-between items-start pt-1">
-
-            <div class="space-y-0.5">
-
-              <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
-                Crear Cuenta
-              </h3>
-
-              <p class="text-[11px] text-slate-500 font-semibold">
-                Regístrate con tu correo institucional.
-              </p>
-
-            </div>
-
-
-            <button
-              @click="cambiarALogin"
-              class="text-xs font-bold text-slate-500 hover:text-[#00723F] hover:underline"
-            >
-              Regresar
-            </button>
-
-          </div>
-
-
-          <form
-            @submit.prevent="manejarRegistro"
-            class="space-y-4"
+          <h2
+            class="font-black uppercase"
           >
-
-            <input
-              v-model="nombreRegistro"
-              type="text"
-              required
-              placeholder="Nombre completo"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
-            />
+            Crear Cuenta
+          </h2>
 
 
-            <input
-              v-model="correoRegistro"
-              type="email"
-              required
-              placeholder="correo@alumno.uptex.edu.mx"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
-            />
+          <input
+            v-model="
+              nombreRegistro
+            "
+            required
+            placeholder="Nombre completo"
+            class="w-full border rounded-xl px-4 py-3"
+          />
 
 
-            <input
-              v-model="passwordRegistro"
-              type="password"
-              required
-              placeholder="Contraseña"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
-            />
+          <input
+            v-model="
+              correoRegistro
+            "
+            type="email"
+            required
+            placeholder="Correo institucional"
+            class="w-full border rounded-xl px-4 py-3"
+          />
 
 
-            <input
-              v-model="passwordConfirmacion"
-              type="password"
-              required
-              placeholder="Confirmar contraseña"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#00723F]"
-            />
+          <input
+            v-model="
+              passwordRegistro
+            "
+            type="password"
+            required
+            placeholder="Contraseña"
+            class="w-full border rounded-xl px-4 py-3"
+          />
 
 
-            <p
-              v-if="mensajeRegistro"
-              :class="
-                errorRegistro
-                  ? 'text-[#7A1C33]'
-                  : 'text-[#0F766E]'
-              "
-              class="text-[11px] font-semibold text-center"
-            >
-              {{ mensajeRegistro }}
-            </p>
+          <input
+            v-model="
+              passwordConfirmacion
+            "
+            type="password"
+            required
+            placeholder="Confirmar contraseña"
+            class="w-full border rounded-xl px-4 py-3"
+          />
 
 
-            <button
-              type="submit"
-              :disabled="cargandoRegistro"
-              class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-md disabled:opacity-50"
-            >
+          <p
+            v-if="
+              mensajeRegistro
+            "
+            :class="
+              errorRegistro
+                ? 'text-red-700'
+                : 'text-green-700'
+            "
+            class="text-xs text-center"
+          >
+            {{ mensajeRegistro }}
+          </p>
 
-              {{
-                cargandoRegistro
-                  ? 'Registrando...'
-                  : 'Crear Cuenta'
-              }}
 
-            </button>
+          <button
+            class="w-full bg-[#00723F] text-white py-3 rounded-xl font-bold"
+          >
+            {{
+              cargandoRegistro
+                ? 'Registrando...'
+                : 'Crear Cuenta'
+            }}
+          </button>
 
-          </form>
 
-        </div>
+          <button
+            type="button"
+            @click="
+              cambiarALogin
+            "
+            class="w-full text-xs text-slate-500"
+          >
+            Regresar
+          </button>
+
+        </form>
 
       </div>
 
@@ -1743,81 +1711,75 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'verificacion'"
-        class="w-full max-w-md relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'verificacion'
+        "
+        class="w-full max-w-md relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-4 text-center">
+        <div
+          class="bg-white rounded-3xl p-8 shadow-2xl space-y-4 text-center"
+        >
 
-          <div class="max-w-[160px] w-full mx-auto overflow-hidden">
-
-            <img
-              :src="logoUptex"
-              alt="UPTex"
-              class="w-full h-auto object-contain block"
-            />
-
-          </div>
-
-
-          <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
+          <h2
+            class="font-black"
+          >
             Verifica tu correo
-          </h3>
+          </h2>
 
 
-          <p class="text-xs text-slate-500">
-
+          <p
+            class="text-xs"
+          >
             Código enviado a
-
             <strong>
               {{ correoParaVerificar }}
             </strong>
-
           </p>
 
 
           <input
-            v-model="codigoVerificacion"
-            type="text"
+            v-model="
+              codigoVerificacion
+            "
             maxlength="6"
             placeholder="ABC123"
-            class="w-full text-center tracking-[0.3em] font-mono uppercase bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#00723F]"
+            class="w-full text-center border rounded-xl py-3"
           />
 
 
           <p
-            v-if="mensajeVerificacion"
+            v-if="
+              mensajeVerificacion
+            "
             :class="
               errorVerificacion
-                ? 'text-[#7A1C33]'
-                : 'text-[#0F766E]'
+                ? 'text-red-700'
+                : 'text-green-700'
             "
-            class="text-xs font-semibold"
           >
             {{ mensajeVerificacion }}
           </p>
 
 
           <button
-            @click="verificarCodigo"
-            :disabled="cargandoVerificacion"
-            class="w-full bg-[#00723F] hover:bg-[#005C32] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider disabled:opacity-50"
+            @click="
+              verificarCodigo
+            "
+            class="w-full bg-[#00723F] text-white py-3 rounded-xl"
           >
-
-            {{
-              cargandoVerificacion
-                ? 'Verificando...'
-                : 'Verificar código'
-            }}
-
+            Verificar código
           </button>
 
 
           <button
-            @click="reenviarCodigo"
-            class="text-[11px] text-slate-500 hover:text-[#00723F] hover:underline font-semibold"
+            @click="
+              reenviarCodigo
+            "
+            class="text-xs text-slate-500"
           >
-            ¿No recibiste el código? Reenviar
+            Reenviar código
           </button>
 
         </div>
@@ -1830,164 +1792,199 @@ onUnmounted(() => {
       ==================================================== -->
 
       <div
-        v-if="vistaActiva === 'recuperar'"
-        class="w-full max-w-md relative z-20 flex flex-col items-center"
+        v-if="
+          vistaActiva ===
+          'recuperar'
+        "
+        class="w-full max-w-md relative z-20"
       >
 
-        <div class="w-full bg-white/97 backdrop-blur-md rounded-3xl p-8 border border-slate-200/60 shadow-2xl space-y-4">
+        <div
+          class="bg-white rounded-3xl p-8 shadow-2xl space-y-4"
+        >
 
-          <div class="flex justify-between items-start">
-
-            <h3 class="text-base font-black text-[#1C1F26] uppercase tracking-tight">
-              Recuperar Contraseña
-            </h3>
-
-
-            <button
-              @click="cambiarALogin"
-              class="text-xs font-bold text-slate-500 hover:underline"
-            >
-              Regresar
-            </button>
-
-          </div>
+          <h2
+            class="font-black"
+          >
+            Recuperar Contraseña
+          </h2>
 
 
-          <div
+          <template
             v-if="
               pasoRecuperacion ===
               1
             "
-            class="space-y-4"
           >
 
-            <p class="text-xs text-slate-500">
-              Ingresa tu correo institucional y te enviaremos un código.
-            </p>
-
-
             <input
-              v-model="correoRecuperacion"
+              v-model="
+                correoRecuperacion
+              "
               type="email"
-              required
               placeholder="Correo institucional"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
+              class="w-full border rounded-xl px-4 py-3"
             />
 
 
-            <p
-              v-if="mensajeRecuperacion"
-              :class="
-                errorRecuperacion
-                  ? 'text-[#7A1C33]'
-                  : 'text-[#0F766E]'
-              "
-              class="text-[11px] font-semibold text-center"
-            >
-              {{ mensajeRecuperacion }}
-            </p>
-
-
             <button
-              @click="enviarCodigoRecuperacion"
-              :disabled="cargandoRecuperacion"
-              class="w-full bg-[#00723F] text-white font-bold py-3 rounded-xl text-xs uppercase disabled:opacity-50"
+              @click="
+                enviarCodigoRecuperacion
+              "
+              class="w-full bg-[#00723F] text-white py-3 rounded-xl"
             >
-
-              {{
-                cargandoRecuperacion
-                  ? 'Enviando...'
-                  : 'Enviar código'
-              }}
-
+              Enviar código
             </button>
 
-          </div>
+          </template>
 
 
-          <div
-            v-if="
-              pasoRecuperacion ===
-              2
-            "
-            class="space-y-4"
+          <template
+            v-else
           >
 
             <input
-              v-model="codigoRecuperacion"
-              type="text"
-              maxlength="6"
-              placeholder="Código (ABC123)"
-              class="w-full text-center tracking-[0.3em] font-mono uppercase bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm"
-            />
-
-
-            <input
-              v-model="passwordNueva"
-              type="password"
-              required
-              placeholder="Nueva contraseña"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
-            />
-
-
-            <input
-              v-model="passwordNuevaConfirmar"
-              type="password"
-              required
-              placeholder="Confirmar nueva contraseña"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs"
-            />
-
-
-            <p
-              v-if="mensajeRecuperacion"
-              :class="
-                errorRecuperacion
-                  ? 'text-[#7A1C33]'
-                  : 'text-[#0F766E]'
+              v-model="
+                codigoRecuperacion
               "
-              class="text-[11px] font-semibold text-center"
-            >
-              {{ mensajeRecuperacion }}
-            </p>
+              maxlength="6"
+              placeholder="Código"
+              class="w-full border rounded-xl px-4 py-3"
+            />
+
+
+            <input
+              v-model="
+                passwordNueva
+              "
+              type="password"
+              placeholder="Nueva contraseña"
+              class="w-full border rounded-xl px-4 py-3"
+            />
+
+
+            <input
+              v-model="
+                passwordNuevaConfirmar
+              "
+              type="password"
+              placeholder="Confirmar contraseña"
+              class="w-full border rounded-xl px-4 py-3"
+            />
 
 
             <button
-              @click="restablecerContrasena"
-              :disabled="cargandoRecuperacion"
-              class="w-full bg-[#00723F] text-white font-bold py-3 rounded-xl text-xs uppercase disabled:opacity-50"
+              @click="
+                restablecerContrasena
+              "
+              class="w-full bg-[#00723F] text-white py-3 rounded-xl"
             >
-
-              {{
-                cargandoRecuperacion
-                  ? 'Guardando...'
-                  : 'Restablecer contraseña'
-              }}
-
+              Restablecer contraseña
             </button>
 
-          </div>
+          </template>
+
+
+          <p
+            v-if="
+              mensajeRecuperacion
+            "
+            :class="
+              errorRecuperacion
+                ? 'text-red-700'
+                : 'text-green-700'
+            "
+            class="text-xs"
+          >
+            {{ mensajeRecuperacion }}
+          </p>
+
+
+          <button
+            @click="
+              cambiarALogin
+            "
+            class="w-full text-xs text-slate-500"
+          >
+            Regresar
+          </button>
 
         </div>
 
       </div>
 
 
-      <!-- FOOTER -->
-
-      <footer class="w-full text-center relative z-20 pt-6">
-
-        <p class="text-[10px] font-bold text-white/95 tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
-
-          &copy; 2026 Universidad Politécnica de Texcoco.
-          Todos los derechos reservados.
-
-        </p>
-
+      <footer
+        class="relative z-20 text-white text-xs"
+      >
+        © 2026 Universidad Politécnica de Texcoco
       </footer>
 
     </div>
+
+
+    <!-- =====================================================
+         CHALLENGE 2FA
+    ====================================================== -->
+
+    <TwoFactorChallenge
+      v-if="
+        vistaActiva ===
+        'two-factor-challenge'
+      "
+      :challenge-token="
+        twoFactorChallengeToken
+      "
+      @completado="
+        completarTwoFactor
+      "
+      @cancelar="
+        cancelarTwoFactorChallenge
+      "
+    />
+
+
+    <!-- =====================================================
+         CONFIGURACIÓN 2FA
+    ====================================================== -->
+
+    <TwoFactorSetup
+      v-if="
+        vistaActiva ===
+        'two-factor-setup'
+      "
+      @regresar="
+        redirigirSegunRol(
+          usuarioActivo?.role
+        )
+      "
+    />
+
+
+    <!-- =====================================================
+         BOTÓN 2FA
+    ====================================================== -->
+
+    <button
+      v-if="
+        usuarioActivo &&
+        [
+          'panel-master',
+          'panel-admin',
+          'panel-profesor',
+          'panel-alumno'
+        ].includes(
+          vistaActiva
+        )
+      "
+      type="button"
+      @click="
+        abrirTwoFactorSetup
+      "
+      class="fixed right-5 bottom-5 z-50 bg-[#00723F] text-white px-5 py-3 rounded-xl shadow-xl text-xs font-black uppercase"
+    >
+      Seguridad 2FA
+    </button>
 
 
     <!-- =====================================================
@@ -1999,8 +1996,12 @@ onUnmounted(() => {
         vistaActiva ===
         'panel-master'
       "
-      :usuario="usuarioActivo"
-      @cerrar-sesion="cerrarSesion"
+      :usuario="
+        usuarioActivo
+      "
+      @cerrar-sesion="
+        cerrarSesion
+      "
     />
 
 
@@ -2009,8 +2010,12 @@ onUnmounted(() => {
         vistaActiva ===
         'panel-admin'
       "
-      :usuario="usuarioActivo"
-      @cerrar-sesion="cerrarSesion"
+      :usuario="
+        usuarioActivo
+      "
+      @cerrar-sesion="
+        cerrarSesion
+      "
     />
 
 
@@ -2019,8 +2024,12 @@ onUnmounted(() => {
         vistaActiva ===
         'panel-profesor'
       "
-      :usuario="usuarioActivo"
-      @cerrar-sesion="cerrarSesion"
+      :usuario="
+        usuarioActivo
+      "
+      @cerrar-sesion="
+        cerrarSesion
+      "
     />
 
 
@@ -2029,9 +2038,14 @@ onUnmounted(() => {
         vistaActiva ===
         'panel-alumno'
       "
-      :usuario="usuarioActivo"
-      @cerrar-sesion="cerrarSesion"
+      :usuario="
+        usuarioActivo
+      "
+      @cerrar-sesion="
+        cerrarSesion
+      "
     />
 
   </div>
+
 </template>

@@ -5,11 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens;
+    use HasFactory;
+    use Notifiable;
+    use TwoFactorAuthenticatable;
 
     protected $fillable = [
         'name',
@@ -18,6 +22,7 @@ class User extends Authenticatable
         'role',
         'carrera_id',
         'grupo',
+        'grupo_id',
         'matricula',
         'verification_code',
         'verification_code_expires_at',
@@ -28,50 +33,49 @@ class User extends Authenticatable
         'verification_code',
         'verification_code_expires_at',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'verification_code_expires_at' => 'datetime',
-            'password' => 'hashed',
+            'email_verified_at' =>
+                'datetime',
+
+            'verification_code_expires_at' =>
+                'datetime',
+
+            'two_factor_confirmed_at' =>
+                'datetime',
+
+            'password' =>
+                'hashed',
         ];
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CARRERA DEL USUARIO
-    |--------------------------------------------------------------------------
-    */
-
     public function carrera()
-{
-    return $this->belongsTo(
-        \App\Models\Carrera::class
-    );
-}
+    {
+        return $this->belongsTo(
+            Carrera::class
+        );
+    }
 
-public function grupoRelacion()
-{
-    return $this->belongsTo(
-        \App\Models\Grupo::class,
-        'grupo_id'
-    );
-}
+    public function grupoRelacion()
+    {
+        return $this->belongsTo(
+            Grupo::class,
+            'grupo_id'
+        );
+    }
 
-public function gruposTutor()
-{
-    return $this->hasMany(
-        \App\Models\Grupo::class,
-        'tutor_id'
-    );
-}
-    /*
-    |--------------------------------------------------------------------------
-    | SOLICITUDES DEL ALUMNO
-    |--------------------------------------------------------------------------
-    */
+    public function gruposTutor()
+    {
+        return $this->hasMany(
+            Grupo::class,
+            'tutor_id'
+        );
+    }
 
     public function solicitudes()
     {
@@ -80,17 +84,6 @@ public function gruposTutor()
             'user_id'
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CARRERAS ASIGNADAS
-    |--------------------------------------------------------------------------
-    |
-    | Sirve para:
-    | - Jefe de Carrera
-    | - Profesor/Tutor
-    |
-    */
 
     public function carrerasAsignadas()
     {
@@ -101,12 +94,6 @@ public function gruposTutor()
             'carrera_id'
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ASIGNACIONES
-    |--------------------------------------------------------------------------
-    */
 
     public function asignacionesCarrera()
     {
