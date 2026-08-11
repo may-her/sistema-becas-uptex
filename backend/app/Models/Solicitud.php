@@ -2,38 +2,58 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Solicitud extends Model
 {
-    use HasFactory;
+    protected $table = 'solicitudes';
 
-    protected $table = 'solicitudes_beca';
 
     protected $fillable = [
         'user_id',
         'convocatoria_id',
         'carrera_id',
+        'grupo_id',
         'grupo',
         'modalidad',
-        'estatus',
+        'porcentaje_solicitado',
+        'porcentaje_beca',
+        'estado',
         'comentario_revision',
         'revisado_por',
-        'revisado_at',
+        'fecha_revision',
+        'resultado_enviado_at',
     ];
+
 
     protected $casts = [
-        'revisado_at' => 'datetime',
+        'porcentaje_solicitado' => 'decimal:2',
+        'porcentaje_beca' => 'decimal:2',
+        'fecha_revision' => 'datetime',
+        'resultado_enviado_at' => 'datetime',
     ];
 
-    public function user()
+
+    /*
+    |--------------------------------------------------------------------------
+    | ALUMNO
+    |--------------------------------------------------------------------------
+    */
+
+    public function usuario()
     {
         return $this->belongsTo(
             User::class,
             'user_id'
         );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CONVOCATORIA
+    |--------------------------------------------------------------------------
+    */
 
     public function convocatoria()
     {
@@ -43,6 +63,13 @@ class Solicitud extends Model
         );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | CARRERA
+    |--------------------------------------------------------------------------
+    */
+
     public function carrera()
     {
         return $this->belongsTo(
@@ -51,19 +78,48 @@ class Solicitud extends Model
         );
     }
 
-    public function revisor()
+
+    /*
+    |--------------------------------------------------------------------------
+    | GRUPO
+    |--------------------------------------------------------------------------
+    */
+
+    public function grupoRelacion()
     {
         return $this->belongsTo(
-            User::class,
-            'revisado_por'
+            Grupo::class,
+            'grupo_id'
         );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DOCUMENTOS
+    |--------------------------------------------------------------------------
+    */
 
     public function documentos()
     {
         return $this->hasMany(
             Documento::class,
             'solicitud_id'
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | USUARIO QUE REVISÓ
+    |--------------------------------------------------------------------------
+    */
+
+    public function revisor()
+    {
+        return $this->belongsTo(
+            User::class,
+            'revisado_por'
         );
     }
 }

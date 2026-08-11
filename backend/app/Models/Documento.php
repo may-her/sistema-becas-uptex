@@ -2,13 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Documento extends Model
 {
-    use HasFactory;
-
     protected $table = 'documentos_solicitud';
 
     protected $fillable = [
@@ -16,6 +13,18 @@ class Documento extends Model
         'tipo_documento',
         'ruta_archivo',
         'nombre_original',
+        'estado',
+        'observaciones',
+        'revisado_por',
+        'revisado_at',
+    ];
+
+    protected $casts = [
+        'revisado_at' => 'datetime',
+    ];
+
+    protected $appends = [
+        'archivo_url',
     ];
 
     public function solicitud()
@@ -23,6 +32,29 @@ class Documento extends Model
         return $this->belongsTo(
             Solicitud::class,
             'solicitud_id'
+        );
+    }
+
+    public function revisor()
+    {
+        return $this->belongsTo(
+            User::class,
+            'revisado_por'
+        );
+    }
+
+    public function getArchivoUrlAttribute()
+    {
+        if (!$this->ruta_archivo) {
+            return null;
+        }
+
+        return asset(
+            'storage/' .
+            ltrim(
+                $this->ruta_archivo,
+                '/'
+            )
         );
     }
 }

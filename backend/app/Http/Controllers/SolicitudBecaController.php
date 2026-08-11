@@ -3,304 +3,212 @@
 namespace App\Http\Controllers;
 
 use App\Models\Solicitud;
-use App\Models\Convocatoria;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SolicitudBecaController extends Controller
 {
     /*
     |--------------------------------------------------------------------------
-    | TODAS LAS SOLICITUDES
+    | TODAS LAS SOLICITUDES - SUPERADMIN
     |--------------------------------------------------------------------------
     */
 
-    public function index()
-    {
-        $solicitudes = Solicitud::with([
-            'user',
-            'convocatoria.periodo',
-            'documentos'
-        ])
-        ->orderBy('id', 'desc')
-        ->get();
+    public function todas(
+        Request $request
+    ) {
+        $solicitudes =
+            Solicitud::query()
+                ->with([
+                    'usuario',
+                    'convocatoria',
+                    'carrera',
+                    'grupoRelacion',
+                    'documentos',
+                ])
+                ->orderByDesc('id')
+                ->get();
+
 
         return response()->json([
-            'status' => 'success',
-            'data' => $solicitudes
+            'data' =>
+                $solicitudes,
         ]);
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | MASTER - TODAS
+    | SOLICITUDES POR CARRERA ASIGNADA
     |--------------------------------------------------------------------------
+    |
+    | Para:
+    |
+    | admin
+    | profesor
+    |
     */
 
-    public function todas()
-    {
-        return $this->index();
-    }
+    public function porCarreraAsignada(
+        Request $request
+    ) {
+        $usuario =
+            $request->user();
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | ALUMNO - MIS SOLICITUDES
-    |--------------------------------------------------------------------------
-    */
-
-    public function misSolicitudes(Request $request)
-    {
-        $solicitudes = Solicitud::with([
-            'convocatoria.periodo',
-            'documentos'
-        ])
-        ->where('user_id', $request->user()->id)
-        ->orderBy('id', 'desc')
-        ->get();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $solicitudes
-        ]);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALUMNO - SOLICITUD ACTIVA
-    |--------------------------------------------------------------------------
-    */
-
-    public function miSolicitudActiva(Request $request)
-    {
-        $solicitud = Solicitud::with([
-            'convocatoria.periodo',
-            'documentos'
-        ])
-        ->where('user_id', $request->user()->id)
-        ->whereIn('estado', [
-            'PENDIENTE',
-            'EN_REVISION',
-            'DOCUMENTACION_INCOMPLETA'
-        ])
-        ->orderBy('id', 'desc')
-        ->first();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $solicitud
-        ]);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALUMNO - SOLICITAR BECA
-    |--------------------------------------------------------------------------
-    */
-
-    public function crear(Request $request)
-    {
-        $validated = $request->validate([
-            'convocatoria_id' => [
-                'required',
-                'exists:convocatorias,id'
-            ]
-        ]);
-
-        $convocatoria = Convocatoria::findOrFail(
-            $validated['convocatoria_id']
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | Validar que la convocatoria esté publicada
-        |--------------------------------------------------------------------------
-        */
-
-        if ($convocatoria->estado !== 'PUBLICADA') {
+        if (!$usuario) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'La convocatoria no está disponible para recibir solicitudes.'
-            ], 422);
+                'message' =>
+                    'Usuario no autenticado.',
+            ], 401);
         }
 
+
         /*
         |--------------------------------------------------------------------------
-        | Evitar solicitudes duplicadas
+        | OBTENER CARRERAS ASIGNADAS
         |--------------------------------------------------------------------------
         */
 
-        $existente = Solicitud::where('user_id', $request->user()->id)
-            ->where('convocatoria_id', $convocatoria->id)
-            ->first();
+        $carreras =
+            DB::table(
+                'asignaciones_carrera'
+            )
+            ->where(
+                'user_id',
+                $usuario->id
+            )
+            ->pluck(
+                'carrera_id'
+            );
 
-        if ($existente) {
 
-            $existente->load([
-                'convocatoria.periodo',
-                'documentos'
-            ]);
+        if ($carreras->isEmpty()) {
 
             return response()->json([
-                'status' => 'success',
-                'message' => 'Ya tienes una solicitud registrada para esta convocatoria.',
-                'data' => $existente
+                'data' => [],
+                'message' =>
+                    'No tienes carreras asignadas.',
             ]);
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Crear solicitud
-        |--------------------------------------------------------------------------
-        */
 
-        $solicitud = Solicitud::create([
-            'user_id' => $request->user()->id,
-            'convocatoria_id' => $convocatoria->id,
-            'estado' => 'PENDIENTE'
+        $solicitudes =
+            Solicitud::query()
+                ->with([
+                    'usuario',
+                    'convocatoria',
+                    'carrera',
+                    'grupoRelacion',
+                    'documentos',
+                ])
+                ->whereIn(
+                    'carrera_id',
+                    $carreras
+                )
+                ->orderByDesc('id')
+                ->get();
+
+
+        return response()->json([
+            'data' =>
+                $solicitudes,
         ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VER EXPEDIENTE
+    |--------------------------------------------------------------------------
+    */
+
+    public function show(
+        Request $request,
+        Solicitud $solicitud
+    ) {
+        if (
+            !$this->puedeRevisar(
+                $request,
+                $solicitud
+            )
+        ) {
+            return response()->json([
+                'message' =>
+                    'No tienes permiso para consultar este expediente.',
+            ], 403);
+        }
+
 
         $solicitud->load([
-            'convocatoria.periodo',
-            'documentos'
+            'usuario',
+            'convocatoria',
+            'carrera',
+            'grupoRelacion',
+            'documentos',
+            'documentos.revisor',
+            'revisor',
         ]);
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Solicitud registrada correctamente.',
-            'data' => $solicitud
-        ], 201);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | COMPATIBILIDAD CON store()
-    |--------------------------------------------------------------------------
-    */
-
-    public function store(Request $request)
-    {
-        return $this->crear($request);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALUMNO - SUBIR DOCUMENTO
-    |--------------------------------------------------------------------------
-    */
-
-    public function subirDocumento(
-        Request $request,
-        $solicitud
-    ) {
-        /*
-        |--------------------------------------------------------------------------
-        | Por ahora validamos que la solicitud pertenezca al alumno.
-        |--------------------------------------------------------------------------
-        */
-
-        $registro = Solicitud::where('id', $solicitud)
-            ->where('user_id', $request->user()->id)
-            ->first();
-
-        if (!$registro) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'La solicitud no existe o no pertenece al alumno.'
-            ], 404);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Esta función necesita conocer exactamente la estructura
-        | de tu tabla documentos antes de guardar el archivo.
-        |--------------------------------------------------------------------------
-        */
 
         return response()->json([
-            'status' => 'error',
-            'message' => 'La solicitud fue encontrada correctamente. La carga de documentos requiere conectar el modelo Documento con sus campos reales.'
-        ], 501);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | JEFE / TUTOR - SOLICITUDES DE SU CARRERA
-    |--------------------------------------------------------------------------
-    */
-
-    public function porCarreraAsignada(Request $request)
-    {
-        $usuario = $request->user();
-
-        $query = Solicitud::with([
-            'user',
-            'convocatoria.periodo',
-            'documentos'
-        ]);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Si el usuario tiene carrera_id, filtramos por ella.
-        |--------------------------------------------------------------------------
-        */
-
-        if ($usuario->carrera_id) {
-
-            $query->whereHas('user', function ($q) use ($usuario) {
-                $q->where('carrera_id', $usuario->carrera_id);
-            });
-        }
-
-        $solicitudes = $query
-            ->orderBy('id', 'desc')
-            ->get();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $solicitudes
+            'data' =>
+                $solicitud,
         ]);
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | ACTUALIZAR ESTATUS
+    | ACTUALIZAR ESTADO
     |--------------------------------------------------------------------------
     */
 
     public function actualizarEstatus(
         Request $request,
-        $solicitud
+        Solicitud $solicitud
     ) {
-        $validated = $request->validate([
-            'estado' => [
-                'required',
-                'in:PENDIENTE,EN_REVISION,ACEPTADA,RECHAZADA,DOCUMENTACION_INCOMPLETA'
-            ]
+        if (
+            !$this->puedeRevisar(
+                $request,
+                $solicitud
+            )
+        ) {
+            return response()->json([
+                'message' =>
+                    'No tienes permiso para modificar esta solicitud.',
+            ], 403);
+        }
+
+
+        $validated =
+            $request->validate([
+                'estado' => [
+                    'required',
+                    'string',
+                    'in:PENDIENTE,EN_REVISION,DOCUMENTACION_INCOMPLETA,ACEPTADA,RECHAZADA',
+                ],
+            ]);
+
+
+        $solicitud->update([
+            'estado' =>
+                $validated['estado'],
+
+            'revisado_por' =>
+                $request->user()->id,
+
+            'fecha_revision' =>
+                now(),
         ]);
 
-        $registro = Solicitud::findOrFail($solicitud);
-
-        $registro->update([
-            'estado' => $validated['estado']
-        ]);
-
-        $registro->load([
-            'user',
-            'convocatoria.periodo',
-            'documentos'
-        ]);
 
         return response()->json([
-            'status' => 'success',
-            'message' => 'El estado de la solicitud fue actualizado correctamente.',
-            'data' => $registro
+            'message' =>
+                'Estado actualizado correctamente.',
+
+            'data' =>
+                $solicitud->fresh(),
         ]);
     }
 
@@ -309,53 +217,212 @@ class SolicitudBecaController extends Controller
     |--------------------------------------------------------------------------
     | DICTAMINAR
     |--------------------------------------------------------------------------
+    |
+    | Aquí diferenciamos:
+    |
+    | porcentaje_solicitado = lo que pidió el alumno
+    | porcentaje_beca       = lo que se autorizó
+    |
     */
 
     public function dictaminar(
         Request $request,
-        $id
+        Solicitud $solicitud
     ) {
-        $validated = $request->validate([
-            'estado' => [
-                'required',
-                'in:ACEPTADA,RECHAZADA,DOCUMENTACION_INCOMPLETA,EN_REVISION'
-            ],
+        if (
+            !$this->puedeRevisar(
+                $request,
+                $solicitud
+            )
+        ) {
+            return response()->json([
+                'message' =>
+                    'No tienes permiso para dictaminar esta solicitud.',
+            ], 403);
+        }
 
-            'observaciones' => [
-                'nullable',
-                'string'
-            ]
-        ]);
 
-        $solicitud = Solicitud::findOrFail($id);
+        $validated =
+            $request->validate([
+                'estado' => [
+                    'required',
+                    'string',
+                    'in:ACEPTADA,RECHAZADA',
+                ],
+
+                'porcentaje_beca' => [
+                    'nullable',
+                    'numeric',
+                    'between:0,100',
+                ],
+
+                'comentario_revision' => [
+                    'nullable',
+                    'string',
+                    'max:2000',
+                ],
+            ]);
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SI ES ACEPTADA, EL PORCENTAJE ES OBLIGATORIO
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $validated['estado'] ===
+            'ACEPTADA'
+            &&
+            (
+                !array_key_exists(
+                    'porcentaje_beca',
+                    $validated
+                )
+                ||
+                $validated[
+                    'porcentaje_beca'
+                ] === null
+            )
+        ) {
+            return response()->json([
+                'message' =>
+                    'Debes indicar el porcentaje de beca autorizado.',
+            ], 422);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SI ES RECHAZADA NO GUARDAMOS PORCENTAJE
+        |--------------------------------------------------------------------------
+        */
+
+        $porcentaje =
+            $validated['estado'] ===
+            'ACEPTADA'
+                ? $validated[
+                    'porcentaje_beca'
+                ]
+                : null;
+
 
         $solicitud->update([
-            'estado' => $validated['estado'],
-            'observaciones' => $validated['observaciones'] ?? null
+            'estado' =>
+                $validated['estado'],
+
+            'porcentaje_beca' =>
+                $porcentaje,
+
+            'comentario_revision' =>
+                $validated[
+                    'comentario_revision'
+                ]
+                ?? null,
+
+            'revisado_por' =>
+                $request->user()->id,
+
+            'fecha_revision' =>
+                now(),
         ]);
+
 
         $solicitud->load([
-            'user',
-            'convocatoria.periodo',
-            'documentos'
+            'usuario',
+            'convocatoria',
+            'carrera',
+            'grupoRelacion',
+            'documentos',
         ]);
 
+
         return response()->json([
-            'status' => 'success',
-            'message' => 'Dictamen guardado correctamente.',
-            'data' => $solicitud
+            'message' =>
+                $validated['estado'] ===
+                'ACEPTADA'
+                    ? 'Solicitud aceptada correctamente.'
+                    : 'Solicitud rechazada.',
+
+            'data' =>
+                $solicitud,
         ]);
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | MI SOLICITUD - COMPATIBILIDAD
+    | VERIFICAR PERMISO
     |--------------------------------------------------------------------------
     */
 
-    public function miSolicitud(Request $request)
-    {
-        return $this->miSolicitudActiva($request);
+    private function puedeRevisar(
+        Request $request,
+        Solicitud $solicitud
+    ): bool {
+        $usuario =
+            $request->user();
+
+
+        if (!$usuario) {
+            return false;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SUPERADMIN PUEDE VER TODO
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $usuario->role ===
+            'superadmin'
+        ) {
+            return true;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADMIN / PROFESOR
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !in_array(
+                $usuario->role,
+                [
+                    'admin',
+                    'profesor',
+                ],
+                true
+            )
+        ) {
+            return false;
+        }
+
+
+        $carreras =
+            DB::table(
+                'asignaciones_carrera'
+            )
+            ->where(
+                'user_id',
+                $usuario->id
+            )
+            ->pluck(
+                'carrera_id'
+            )
+            ->map(
+                fn ($id) =>
+                    (int) $id
+            );
+
+
+        return $carreras->contains(
+            (int)
+            $solicitud->carrera_id
+        );
     }
 }

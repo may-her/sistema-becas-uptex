@@ -12,31 +12,26 @@ use Illuminate\Support\Str;
 
 class LoginController extends Controller
 {
-    public function login(
-        Request $request
-    ) {
-        $validator =
-            Validator::make(
-                $request->all(),
-                [
-                    'email' => [
-                        'required',
-                        'email',
-                    ],
+    public function login(Request $request)
+    {
+        $validator = Validator::make(
+            $request->all(),
+            [
+                'email' => [
+                    'required',
+                    'email',
+                ],
 
-                    'password' => [
-                        'required',
-                        'string',
-                    ],
-                ]
-            );
+                'password' => [
+                    'required',
+                    'string',
+                ],
+            ]
+        );
 
-        if (
-            $validator->fails()
-        ) {
+        if ($validator->fails()) {
             return response()->json([
-                'status' =>
-                    'error',
+                'status' => 'error',
 
                 'message' =>
                     $validator
@@ -45,57 +40,71 @@ class LoginController extends Controller
             ], 422);
         }
 
-        $user =
-            User::where(
-                'email',
-                $request->email
-            )->first();
 
-        if (! $user) {
+        $user = User::where(
+            'email',
+            $request->email
+        )->first();
+
+
+        if (!$user) {
             return response()->json([
-                'status' =>
-                    'error',
+                'status' => 'error',
 
                 'message' =>
                     'El usuario no existe.',
             ], 401);
         }
 
+
         if (
-            ! Hash::check(
+            !Hash::check(
                 $request->password,
                 $user->password
             )
         ) {
             return response()->json([
-                'status' =>
-                    'error',
+                'status' => 'error',
 
                 'message' =>
                     'La contraseña es incorrecta.',
             ], 401);
         }
 
+
         if (
-            ! $user->email_verified_at
+            !$user->email_verified_at
         ) {
             return response()->json([
-                'status' =>
-                    'error',
+                'status' => 'error',
 
                 'message' =>
                     'Debes verificar tu correo antes de iniciar sesión.',
             ], 403);
         }
 
+
         /*
         |--------------------------------------------------------------------------
-        | SI EL USUARIO TIENE 2FA
+        | CARGAR DATOS DEL USUARIO
         |--------------------------------------------------------------------------
-        |
-        | Todavía NO generamos token Sanctum.
-        | Primero debe comprobar su código TOTP.
-        |
+        */
+
+        try {
+            $user->load([
+                'carrera',
+                'grupoRelacion',
+                'carrerasAsignadas',
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2FA
+        |--------------------------------------------------------------------------
         */
 
         if (
@@ -104,6 +113,7 @@ class LoginController extends Controller
         ) {
             $challengeToken =
                 Str::random(80);
+
 
             Cache::put(
                 'two_factor_challenge:' .
@@ -116,6 +126,7 @@ class LoginController extends Controller
 
                 now()->addMinutes(5)
             );
+
 
             return response()->json([
                 'status' =>
@@ -132,12 +143,13 @@ class LoginController extends Controller
 
                 'expires_in' =>
                     300,
-            ], 200);
+            ]);
         }
+
 
         /*
         |--------------------------------------------------------------------------
-        | LOGIN NORMAL SIN 2FA
+        | ELIMINAR TOKENS ANTERIORES
         |--------------------------------------------------------------------------
         */
 
@@ -145,12 +157,44 @@ class LoginController extends Controller
             ->tokens()
             ->delete();
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | GENERAR TOKEN SANCTUM
+        |--------------------------------------------------------------------------
+        */
+
         $token =
             $user
                 ->createToken(
-                    'auth_token'
+                    'sistema-becas'
                 )
                 ->plainTextToken;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONTRASEÑA TEMPORAL
+        |--------------------------------------------------------------------------
+        */
+
+        $debeCambiarPassword =
+            (bool) (
+                $user
+                    ->debe_cambiar_password
+                ??
+                $user
+                    ->must_change_password
+                ??
+                false
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESPUESTA
+        |--------------------------------------------------------------------------
+        */
 
         return response()->json([
             'status' =>
@@ -171,6 +215,12 @@ class LoginController extends Controller
             'token_type' =>
                 'Bearer',
 
+            'must_change_password' =>
+                $debeCambiarPassword,
+
+            'debe_cambiar_password' =>
+                $debeCambiarPassword,
+
             'user' => [
                 'id' =>
                     $user->id,
@@ -190,23 +240,46 @@ class LoginController extends Controller
                 'carrera_id' =>
                     $user->carrera_id,
 
+                'grupo_id' =>
+                    $user->grupo_id,
+
                 'grupo' =>
-                    $user->grupo,
+                    $user
+                        ->grupoRelacion
+                        ?->nombre
+                    ??
+                    $user->grupo
+                    ??
+                    null,
+
+                'carrera' =>
+                    $user->carrera,
+
+                'grupo_relacion' =>
+                    $user->grupoRelacion,
             ],
         ], 200);
     }
 
+
     public function logout(
         Request $request
     ) {
-        $token =
-            $request
-                ->user()
-                ?->currentAccessToken();
+        $user =
+            $request->user();
 
-        if ($token) {
-            $token->delete();
+
+        if ($user) {
+            $token =
+                $user
+                    ->currentAccessToken();
+
+
+            if ($token) {
+                $token->delete();
+            }
         }
+
 
         return response()->json([
             'status' =>
@@ -214,6 +287,6 @@ class LoginController extends Controller
 
             'message' =>
                 'Sesión cerrada correctamente.',
-        ], 200);
+        ]);
     }
 }

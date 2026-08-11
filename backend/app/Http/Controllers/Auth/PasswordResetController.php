@@ -7,81 +7,526 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 class PasswordResetController extends Controller
 {
-    // Paso 1: el usuario pide el código
-    public function enviarCodigo(Request $request)
-    {
-        $request->validate(['email' => 'required|email']);
+    /*
+    |--------------------------------------------------------------------------
+    | ENVIAR CÓDIGO DE RECUPERACIÓN
+    |--------------------------------------------------------------------------
+    */
 
-        $user = User::where('email', $request->email)->first();
+    public function enviarCodigo(
+        Request $request
+    ) {
+        $validated =
+            $request->validate([
+                'email' => [
+                    'required',
+                    'email',
+                ],
+            ]);
 
-        // Por seguridad, siempre respondemos igual exista o no el correo
-        if (!$user) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Si el correo existe, se envió un código de recuperación.'
-            ], 200);
-        }
 
-        $codigo = strtoupper(Str::random(6));
-        $user->reset_password_code = $codigo;
-        $user->reset_password_expires_at = Carbon::now()->addMinutes(15);
-        $user->save();
-
-        Mail::send([], [], function ($message) use ($user, $codigo) {
-            $message->to($user->email)
-                ->subject('🔑 Recuperación de Contraseña - Sistema de Becas UPTex')
-                ->html("
-                    <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 12px;'>
-                        <h2 style='color: #7A1C33; text-align: center;'>Universidad Politécnica de Texcoco</h2>
-                        <p>Hola <strong>{$user->name}</strong>,</p>
-                        <p>Solicitaste recuperar tu contraseña. Usa este código (válido por 15 minutos):</p>
-                        <div style='background-color: #F3F4F6; border: 2px dashed #7A1C33; padding: 15px; text-align: center; margin: 20px 0; border-radius: 10px;'>
-                            <span style='font-family: monospace; font-size: 28px; font-weight: bold; letter-spacing: 5px; color: #007A54;'>{$codigo}</span>
-                        </div>
-                        <p style='font-size: 11px; color: #6B7280; text-align: center;'>Si tú no solicitaste esto, ignora este correo.</p>
-                    </div>
-                ");
-        });
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Si el correo existe, se envió un código de recuperación.'
-        ], 200);
-    }
-
-    // Paso 2: verifica el código y cambia la contraseña
-    public function restablecer(Request $request)
-    {
-        $data = $request->validate([
-            'email' => 'required|email',
-            'codigo' => 'required|string',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
-
-        $codigoLimpio = strtoupper(trim($data['codigo']));
-        $user = User::where('email', $data['email'])
-            ->where('reset_password_code', $codigoLimpio)
+        $usuario =
+            User::where(
+                'email',
+                $validated['email']
+            )
             ->first();
 
-        if (!$user) {
-            return response()->json(['status' => 'error', 'message' => 'Código incorrecto.'], 400);
+
+        /*
+        |--------------------------------------------------------------------------
+        | NO REVELAR SI EL CORREO EXISTE
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$usuario) {
+
+            return response()->json([
+                'message' =>
+                    'Si el correo está registrado, recibirás un código de recuperación.',
+            ]);
         }
 
-        if (Carbon::now()->greaterThan($user->reset_password_expires_at)) {
-            return response()->json(['status' => 'error', 'message' => 'El código ha expirado, solicita uno nuevo.'], 400);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CÓDIGO DE 6 DÍGITOS
+        |--------------------------------------------------------------------------
+        */
+
+        $codigo =
+            (string)
+            random_int(
+                100000,
+                999999
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | GUARDAR HASH DEL CÓDIGO
+        |--------------------------------------------------------------------------
+        */
+
+        $usuario->reset_password_code =
+            Hash::make(
+                $codigo
+            );
+
+
+        $usuario
+            ->reset_password_expires_at =
+            now()->addMinutes(15);
+
+
+        $usuario->save();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | URL DEL SISTEMA
+        |--------------------------------------------------------------------------
+        */
+
+        $frontendUrl =
+            env(
+                'FRONTEND_URL',
+                'http://localhost:5173'
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ENVIAR CORREO
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+
+            Mail::raw(
+                "Hola {$usuario->name}.\n\n" .
+                "Tu código para recuperar tu contraseña es:\n\n" .
+                "{$codigo}\n\n" .
+                "Este código tiene una vigencia de 15 minutos.\n\n" .
+                "Puedes regresar al Sistema de Becas desde:\n" .
+                "{$frontendUrl}\n\n" .
+                "Si tú no solicitaste este cambio, ignora este mensaje.",
+
+                function ($message) use (
+                    $usuario
+                ) {
+
+                    $message
+                        ->to(
+                            $usuario->email
+                        )
+                        ->subject(
+                            'Recuperación de contraseña - Sistema de Becas UPTex'
+                        );
+                }
+            );
+
+        } catch (\Throwable $e) {
+
+            report($e);
+
+
+            if (
+                config('app.debug')
+            ) {
+                return response()->json([
+                    'message' =>
+                        'No fue posible enviar el correo.',
+
+                    'error' =>
+                        $e->getMessage(),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | SOLO PARA DESARROLLO LOCAL
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'codigo_debug' =>
+                        $codigo,
+                ], 500);
+            }
+
+
+            return response()->json([
+                'message' =>
+                    'No fue posible enviar el correo de recuperación.',
+            ], 500);
         }
 
-        $user->password = Hash::make($data['password']);
-        $user->reset_password_code = null;
-        $user->reset_password_expires_at = null;
-        $user->tokens()->delete(); // cierra todas las sesiones activas por seguridad
-        $user->save();
 
-        return response()->json(['status' => 'success', 'message' => 'Contraseña actualizada. Ya puedes iniciar sesión.'], 200);
+        return response()->json([
+            'message' =>
+                'Si el correo está registrado, recibirás un código de recuperación.',
+        ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESTABLECER CONTRASEÑA
+    |--------------------------------------------------------------------------
+    */
+
+    public function restablecer(
+        Request $request
+    ) {
+        $validated =
+            $request->validate([
+                'email' => [
+                    'required',
+                    'email',
+                ],
+
+                'code' => [
+                    'required',
+                    'string',
+                ],
+
+                'password' => [
+                    'required',
+                    'string',
+                    'min:8',
+                    'confirmed',
+                ],
+            ]);
+
+
+        $usuario =
+            User::where(
+                'email',
+                $validated['email']
+            )
+            ->first();
+
+
+        if (
+            !$usuario ||
+            !$usuario->reset_password_code
+        ) {
+            return response()->json([
+                'message' =>
+                    'El código es inválido o ha expirado.',
+            ], 422);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | EXPIRACIÓN
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !$usuario
+                ->reset_password_expires_at
+            ||
+            now()->greaterThan(
+                $usuario
+                    ->reset_password_expires_at
+            )
+        ) {
+
+            $usuario->reset_password_code =
+                null;
+
+            $usuario
+                ->reset_password_expires_at =
+                null;
+
+            $usuario->save();
+
+
+            return response()->json([
+                'message' =>
+                    'El código ha expirado. Solicita uno nuevo.',
+            ], 422);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | VERIFICAR CÓDIGO
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !Hash::check(
+                $validated['code'],
+                $usuario
+                    ->reset_password_code
+            )
+        ) {
+            return response()->json([
+                'message' =>
+                    'El código de recuperación es incorrecto.',
+            ], 422);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | NUEVA CONTRASEÑA
+        |--------------------------------------------------------------------------
+        */
+
+        $usuario->password =
+            Hash::make(
+                $validated['password']
+            );
+
+
+        $usuario->reset_password_code =
+            null;
+
+
+        $usuario
+            ->reset_password_expires_at =
+            null;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | YA NO ES TEMPORAL
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'debe_cambiar_password'
+            )
+        ) {
+            $usuario
+                ->debe_cambiar_password =
+                false;
+        }
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'must_change_password'
+            )
+        ) {
+            $usuario
+                ->must_change_password =
+                false;
+        }
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'password_temporal_generada_at'
+            )
+        ) {
+            $usuario
+                ->password_temporal_generada_at =
+                null;
+        }
+
+
+        $usuario->save();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CERRAR TOKENS ANTERIORES
+        |--------------------------------------------------------------------------
+        */
+
+        $usuario
+            ->tokens()
+            ->delete();
+
+
+        return response()->json([
+            'message' =>
+                'Contraseña restablecida correctamente.',
+        ]);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CAMBIAR CONTRASEÑA TEMPORAL
+    |--------------------------------------------------------------------------
+    |
+    | Se usa cuando SuperAdmin genera una contraseña temporal.
+    |
+    */
+
+    public function cambiarPasswordTemporal(
+        Request $request
+    ) {
+        $validated =
+            $request->validate([
+                'password' => [
+                    'required',
+                    'string',
+                    'min:8',
+                    'confirmed',
+                ],
+            ]);
+
+
+        $usuario =
+            $request->user();
+
+
+        if (!$usuario) {
+            return response()->json([
+                'message' =>
+                    'Usuario no autenticado.',
+            ], 401);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | VERIFICAR QUE REALMENTE DEBA CAMBIARLA
+        |--------------------------------------------------------------------------
+        */
+
+        $debeCambiar = false;
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'debe_cambiar_password'
+            )
+        ) {
+            $debeCambiar =
+                $debeCambiar ||
+                (bool)
+                $usuario
+                    ->debe_cambiar_password;
+        }
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'must_change_password'
+            )
+        ) {
+            $debeCambiar =
+                $debeCambiar ||
+                (bool)
+                $usuario
+                    ->must_change_password;
+        }
+
+
+        if (!$debeCambiar) {
+            return response()->json([
+                'message' =>
+                    'Tu contraseña actual no está marcada como temporal.',
+            ], 422);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ACTUALIZAR
+        |--------------------------------------------------------------------------
+        */
+
+        $usuario->password =
+            Hash::make(
+                $validated['password']
+            );
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'debe_cambiar_password'
+            )
+        ) {
+            $usuario
+                ->debe_cambiar_password =
+                false;
+        }
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'must_change_password'
+            )
+        ) {
+            $usuario
+                ->must_change_password =
+                false;
+        }
+
+
+        if (
+            Schema::hasColumn(
+                'users',
+                'password_temporal_generada_at'
+            )
+        ) {
+            $usuario
+                ->password_temporal_generada_at =
+                null;
+        }
+
+
+        $usuario->save();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | INVALIDAR OTROS TOKENS
+        |--------------------------------------------------------------------------
+        */
+
+        $tokenActual =
+            $usuario
+                ->currentAccessToken();
+
+
+        $usuario
+            ->tokens()
+            ->when(
+                $tokenActual,
+                function ($query) use (
+                    $tokenActual
+                ) {
+                    return $query
+                        ->where(
+                            'id',
+                            '!=',
+                            $tokenActual->id
+                        );
+                }
+            )
+            ->delete();
+
+
+        return response()->json([
+            'message' =>
+                'Contraseña actualizada correctamente.',
+
+            'must_change_password' =>
+                false,
+
+            'debe_cambiar_password' =>
+                false,
+        ]);
     }
 }
